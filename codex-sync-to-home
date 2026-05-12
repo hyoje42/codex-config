@@ -16,7 +16,7 @@ else
     rules_diff=$?
 fi
 
-if diff -r "$CODEX_REPO/skills" "$CODEX_HOME/skills" >/dev/null 2>&1; then
+if diff -r -x '.system' "$CODEX_REPO/skills" "$CODEX_HOME/skills" >/dev/null 2>&1; then
     skills_diff=0
 else
     skills_diff=$?
