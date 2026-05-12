@@ -1,0 +1,105 @@
+#!/bin/bash
+
+set -euo pipefail
+
+CODEX_REPO="$(cd "$(dirname "$0")" && pwd)"
+CODEX_HOME="$HOME/.codex"
+CODEX_RULES_HOME="$CODEX_HOME/rules/dev-tools"
+
+changed_files=()
+new_files=()
+deleted_files=()
+
+compare_file() {
+    local rel_path="$1"
+    local repo_file="$CODEX_REPO/$rel_path"
+    local home_file="$CODEX_HOME/$rel_path"
+
+    if [[ "$rel_path" == rules/* ]]; then
+        home_file="$CODEX_RULES_HOME/${rel_path#rules/}"
+    fi
+
+    if [ ! -f "$home_file" ]; then
+        new_files+=("$rel_path")
+        return
+    fi
+
+    if ! diff -q "$repo_file" "$home_file" > /dev/null 2>&1; then
+        changed_files+=("$rel_path")
+        echo "----------------------------------------"
+        echo "  $rel_path"
+        echo "----------------------------------------"
+        diff -u "$home_file" "$repo_file" --label "~/.codex/$rel_path" --label "repo/$rel_path" 2>/dev/null | tail -n +3
+        echo ""
+    fi
+}
+
+check_deleted() {
+    local dir="$1"
+    local home_dir="$CODEX_HOME/$dir"
+
+    if [ "$dir" = "rules" ]; then
+        home_dir="$CODEX_RULES_HOME"
+    fi
+
+    if [ ! -d "$home_dir" ]; then
+        return
+    fi
+    while IFS= read -r -d '' home_file; do
+        local rel_path="${home_file#$home_dir/}"
+        if [ "$dir" = "rules" ]; then
+            rel_path="rules/$rel_path"
+        elif [ "$dir" = "skills" ]; then
+            rel_path="skills/$rel_path"
+        fi
+        if [ ! -f "$CODEX_REPO/$rel_path" ]; then
+            deleted_files+=("$rel_path")
+        fi
+    done < <(find "$home_dir" -path "$CODEX_HOME/skills/.system" -prune -o -type f -print0 2>/dev/null)
+}
+
+echo ""
+echo "Comparing repo -> ~/.codex ..."
+echo ""
+
+while IFS= read -r -d '' repo_file; do
+    rel_path="${repo_file#$CODEX_REPO/}"
+    compare_file "$rel_path"
+done < <(find "$CODEX_REPO/rules" "$CODEX_REPO/skills" -type f -print0 2>/dev/null)
+
+compare_file "AGENTS.md"
+
+check_deleted "rules"
+check_deleted "skills"
+
+echo "==========================================="
+echo "  Summary"
+echo "==========================================="
+
+if [ ${#changed_files[@]} -eq 0 ] && [ ${#new_files[@]} -eq 0 ] && [ ${#deleted_files[@]} -eq 0 ]; then
+    echo "  No differences found."
+else
+    if [ ${#changed_files[@]} -gt 0 ]; then
+        echo ""
+        echo "  Modified (${#changed_files[@]}):"
+        for f in "${changed_files[@]}"; do
+            echo "    M  $f"
+        done
+    fi
+    if [ ${#new_files[@]} -gt 0 ]; then
+        echo ""
+        echo "  New in repo (${#new_files[@]}):"
+        for f in "${new_files[@]}"; do
+            echo "    +  $f"
+        done
+    fi
+    if [ ${#deleted_files[@]} -gt 0 ]; then
+        echo ""
+        echo "  Only in ~/.codex (${#deleted_files[@]}):"
+        for f in "${deleted_files[@]}"; do
+            echo "    -  $f"
+        done
+    fi
+fi
+
+echo ""
