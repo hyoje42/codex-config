@@ -1,0 +1,51 @@
+#!/bin/bash
+
+set -euo pipefail
+
+CODEX_REPO="$(cd "$(dirname "$0")" && pwd)"
+CODEX_HOME="$HOME/.codex"
+BACKUP_DIR="$CODEX_REPO/_backup"
+MAX_BACKUPS=5
+CODEX_RULES_HOME="$CODEX_HOME/rules/dev-tools"
+
+mkdir -p "$CODEX_HOME" "$CODEX_HOME/rules" "$BACKUP_DIR"
+
+if diff -r "$CODEX_REPO/rules" "$CODEX_RULES_HOME" >/dev/null 2>&1; then
+    rules_diff=0
+else
+    rules_diff=$?
+fi
+
+if diff -r "$CODEX_REPO/skills" "$CODEX_HOME/skills" >/dev/null 2>&1; then
+    skills_diff=0
+else
+    skills_diff=$?
+fi
+
+if diff "$CODEX_REPO/AGENTS.md" "$CODEX_HOME/AGENTS.md" >/dev/null 2>&1; then
+    agents_diff=0
+else
+    agents_diff=$?
+fi
+
+if [ "$rules_diff" -eq 0 ] && [ "$skills_diff" -eq 0 ] && [ "$agents_diff" -eq 0 ]; then
+    echo "No changes."
+    exit 0
+fi
+
+timestamp=$(date +"%Y-%m-%d_%H-%M-%S")
+backup_target="$BACKUP_DIR/$timestamp"
+mkdir -p "$backup_target"
+
+echo "Backing up ~/.codex state to _backup/$timestamp ..."
+[ -d "$CODEX_RULES_HOME" ]     && mkdir -p "$backup_target/rules" && cp -a "$CODEX_RULES_HOME" "$backup_target/rules/dev-tools"
+[ -d "$CODEX_HOME/skills" ]    && cp -a "$CODEX_HOME/skills"    "$backup_target/"
+[ -f "$CODEX_HOME/AGENTS.md" ] && cp -a "$CODEX_HOME/AGENTS.md" "$backup_target/"
+
+find "$BACKUP_DIR" -mindepth 1 -maxdepth 1 -type d | sort -r | tail -n +$((MAX_BACKUPS + 1)) | xargs -r rm -rf
+
+echo "Syncing rules, skills, and AGENTS.md to ~/.codex..."
+[ "$rules_diff" -ne 0 ]  && mkdir -p "$CODEX_RULES_HOME" && rsync -av --delete "$CODEX_REPO/rules/"  "$CODEX_RULES_HOME/"
+[ "$skills_diff" -ne 0 ] && rsync -av --delete --exclude '.system/' "$CODEX_REPO/skills/" "$CODEX_HOME/skills/"
+[ "$agents_diff" -ne 0 ] && cp -v "$CODEX_REPO/AGENTS.md" "$CODEX_HOME/"
+echo "Done!"
