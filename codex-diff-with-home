@@ -3,8 +3,12 @@
 set -euo pipefail
 
 CODEX_REPO="$(cd "$(dirname "$0")" && pwd)"
+CODEX_SRC="$CODEX_REPO/home"
 CODEX_HOME="$HOME/.codex"
-CODEX_RULES_HOME="$CODEX_HOME/rules/dev-tools"
+
+# Subdirectories we fully manage. Orphans are reported only for these.
+# skills/.system/ is Codex-owned and excluded.
+MANAGED_DIRS=("rules/dev-tools" "skills")
 
 changed_files=()
 new_files=()
@@ -12,12 +16,8 @@ deleted_files=()
 
 compare_file() {
     local rel_path="$1"
-    local repo_file="$CODEX_REPO/$rel_path"
+    local repo_file="$CODEX_SRC/$rel_path"
     local home_file="$CODEX_HOME/$rel_path"
-
-    if [[ "$rel_path" == rules/* ]]; then
-        home_file="$CODEX_RULES_HOME/${rel_path#rules/}"
-    fi
 
     if [ ! -f "$home_file" ]; then
         new_files+=("$rel_path")
@@ -29,48 +29,35 @@ compare_file() {
         echo "----------------------------------------"
         echo "  $rel_path"
         echo "----------------------------------------"
-        diff -u "$home_file" "$repo_file" --label "~/.codex/$rel_path" --label "repo/$rel_path" 2>/dev/null | tail -n +3
+        diff -u "$home_file" "$repo_file" --label "~/.codex/$rel_path" --label "repo/home/$rel_path" 2>/dev/null | tail -n +3
         echo ""
     fi
 }
 
-check_deleted() {
-    local dir="$1"
-    local home_dir="$CODEX_HOME/$dir"
+echo ""
+echo "Comparing repo/home -> ~/.codex ..."
+echo ""
 
-    if [ "$dir" = "rules" ]; then
-        home_dir="$CODEX_RULES_HOME"
-    fi
+# Iterate every file in home/ (top-level + managed subdirs covered here)
+while IFS= read -r -d '' repo_file; do
+    rel_path="${repo_file#$CODEX_SRC/}"
+    compare_file "$rel_path"
+done < <(find "$CODEX_SRC" -type f -print0 2>/dev/null)
 
-    if [ ! -d "$home_dir" ]; then
-        return
-    fi
+# Orphans: files in managed subdirs in ~/.codex/ that are absent in home/
+# Excludes skills/.system/ (Codex-owned).
+for d in "${MANAGED_DIRS[@]}"; do
+    home_d="$CODEX_HOME/$d"
+    src_d="$CODEX_SRC/$d"
+    [ -d "$home_d" ] || continue
     while IFS= read -r -d '' home_file; do
-        local rel_path="${home_file#$home_dir/}"
-        if [ "$dir" = "rules" ]; then
-            rel_path="rules/$rel_path"
-        elif [ "$dir" = "skills" ]; then
-            rel_path="skills/$rel_path"
-        fi
-        if [ ! -f "$CODEX_REPO/$rel_path" ]; then
+        rel_in_dir="${home_file#$home_d/}"
+        rel_path="$d/$rel_in_dir"
+        if [ ! -f "$src_d/$rel_in_dir" ]; then
             deleted_files+=("$rel_path")
         fi
-    done < <(find "$home_dir" -path "$CODEX_HOME/skills/.system" -prune -o -type f -print0 2>/dev/null)
-}
-
-echo ""
-echo "Comparing repo -> ~/.codex ..."
-echo ""
-
-while IFS= read -r -d '' repo_file; do
-    rel_path="${repo_file#$CODEX_REPO/}"
-    compare_file "$rel_path"
-done < <(find "$CODEX_REPO/rules" "$CODEX_REPO/skills" -type f -print0 2>/dev/null)
-
-compare_file "AGENTS.md"
-
-check_deleted "rules"
-check_deleted "skills"
+    done < <(find "$home_d" -type d -name '.system' -prune -o -type f -print0 2>/dev/null)
+done
 
 echo "==========================================="
 echo "  Summary"
