@@ -8,7 +8,7 @@ description: "Create an implementation plan as a markdown file in the workspace'
 ## Purpose
 
 Save implementation plans as markdown files in the workspace's `.plans/` directory.
-Plans are meant to be reviewed by the user and referenced by future Codex sessions or other coding agents or other coding agents.
+Plans are meant to be reviewed by the user and referenced by future Codex sessions or other coding agents.
 
 ## Workflow
 
@@ -52,8 +52,8 @@ ls .plans/*-{task-name}/ 2>/dev/null
 # Version examples
 # codex-plan.md only             → codex-plan-v2.md
 # codex-plan-v2.md exists        → codex-plan-v3.md
-# codex-plan.md only              → codex-plan-v2.md (continues from codex)
-# codex-plan.md + codex-plan-v2  → codex-plan-v3.md
+# claude-plan.md only            → codex-plan-v2.md (continues from claude)
+# claude-plan.md + codex-plan-v2 → codex-plan-v3.md
 ```
 
 ## Plan Template
