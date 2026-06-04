@@ -3,49 +3,85 @@
 set -euo pipefail
 
 CODEX_REPO="$(cd "$(dirname "$0")" && pwd)"
+CODEX_SRC="$CODEX_REPO/home"
 CODEX_HOME="$HOME/.codex"
 BACKUP_DIR="$CODEX_REPO/_backup"
 MAX_BACKUPS=5
-CODEX_RULES_HOME="$CODEX_HOME/rules/dev-tools"
 
-mkdir -p "$CODEX_HOME" "$CODEX_HOME/rules" "$BACKUP_DIR"
+# Subdirectories we fully manage. Orphan files inside these are listed and
+# offered for deletion with confirmation. skills/.system/ is Codex-owned
+# and excluded from sync and orphan checks.
+MANAGED_DIRS=("rules/dev-tools" "skills")
 
-if diff -r "$CODEX_REPO/rules" "$CODEX_RULES_HOME" >/dev/null 2>&1; then
-    rules_diff=0
-else
-    rules_diff=$?
-fi
+mkdir -p "$CODEX_HOME" "$BACKUP_DIR"
 
-if diff -r -x '.system' "$CODEX_REPO/skills" "$CODEX_HOME/skills" >/dev/null 2>&1; then
-    skills_diff=0
-else
-    skills_diff=$?
-fi
+list_orphans() {
+    local d="$1"
+    local home_d="$CODEX_HOME/$d"
+    local src_d="$CODEX_SRC/$d"
+    [ -d "$home_d" ] || return
+    while IFS= read -r -d '' f; do
+        local rel="${f#$home_d/}"
+        [ -f "$src_d/$rel" ] || echo "$f"
+    done < <(find "$home_d" -type d -name '.system' -prune -o -type f -print0 2>/dev/null)
+}
 
-if diff "$CODEX_REPO/AGENTS.md" "$CODEX_HOME/AGENTS.md" >/dev/null 2>&1; then
-    agents_diff=0
-else
-    agents_diff=$?
-fi
+# Detect changes (rsync dry-run) and orphans before doing anything
+sync_changes=$(rsync -an --itemize-changes --exclude='skills/.system/' \
+    "$CODEX_SRC/" "$CODEX_HOME/" 2>/dev/null | grep -cE '^[<>ch]' || true)
+orphan_count=0
+for d in "${MANAGED_DIRS[@]}"; do
+    n=$(list_orphans "$d" | wc -l)
+    orphan_count=$((orphan_count + n))
+done
 
-if [ "$rules_diff" -eq 0 ] && [ "$skills_diff" -eq 0 ] && [ "$agents_diff" -eq 0 ]; then
+if [ "$sync_changes" -eq 0 ] && [ "$orphan_count" -eq 0 ]; then
     echo "No changes."
     exit 0
 fi
 
+# Backup managed state before overwrite
 timestamp=$(date +"%Y-%m-%d_%H-%M-%S")
 backup_target="$BACKUP_DIR/$timestamp"
 mkdir -p "$backup_target"
+echo "Backing up managed parts of ~/.codex to _backup/$timestamp ..."
+for d in "${MANAGED_DIRS[@]}"; do
+    src="$CODEX_HOME/$d"
+    [ -d "$src" ] || continue
+    dst="$backup_target/$d"
+    mkdir -p "$(dirname "$dst")"
+    cp -a "$src" "$dst"
+done
+for f in "$CODEX_SRC"/*; do
+    [ -f "$f" ] || continue
+    bn=$(basename "$f")
+    [ -f "$CODEX_HOME/$bn" ] && cp -a "$CODEX_HOME/$bn" "$backup_target/"
+done
 
-echo "Backing up ~/.codex state to _backup/$timestamp ..."
-[ -d "$CODEX_RULES_HOME" ]     && mkdir -p "$backup_target/rules" && cp -a "$CODEX_RULES_HOME" "$backup_target/rules/dev-tools"
-[ -d "$CODEX_HOME/skills" ]    && cp -a "$CODEX_HOME/skills"    "$backup_target/"
-[ -f "$CODEX_HOME/AGENTS.md" ] && cp -a "$CODEX_HOME/AGENTS.md" "$backup_target/"
+# Prune old backups
+find "$BACKUP_DIR" -mindepth 1 -maxdepth 1 -type d | sort -r \
+    | tail -n +$((MAX_BACKUPS + 1)) | xargs -r rm -rf
 
-find "$BACKUP_DIR" -mindepth 1 -maxdepth 1 -type d | sort -r | tail -n +$((MAX_BACKUPS + 1)) | xargs -r rm -rf
+# Sync home/ -> ~/.codex/ (add/update only; skills/.system/ preserved)
+echo ""
+echo "Syncing home/ -> ~/.codex/ ..."
+rsync -av --exclude='skills/.system/' "$CODEX_SRC/" "$CODEX_HOME/"
 
-echo "Syncing rules, skills, and AGENTS.md to ~/.codex..."
-[ "$rules_diff" -ne 0 ]  && mkdir -p "$CODEX_RULES_HOME" && rsync -av --delete "$CODEX_REPO/rules/"  "$CODEX_RULES_HOME/"
-[ "$skills_diff" -ne 0 ] && rsync -av --delete --exclude '.system/' "$CODEX_REPO/skills/" "$CODEX_HOME/skills/"
-[ "$agents_diff" -ne 0 ] && cp -v "$CODEX_REPO/AGENTS.md" "$CODEX_HOME/"
+# Orphan handling within managed subdirs (confirmed delete)
+for d in "${MANAGED_DIRS[@]}"; do
+    mapfile -t orphans < <(list_orphans "$d")
+    [ ${#orphans[@]} -gt 0 ] || continue
+    echo ""
+    echo "Orphan files in ~/.codex/$d/ (present in dest but not in repo home/$d/):"
+    for o in "${orphans[@]}"; do echo "  ${o#$CODEX_HOME/}"; done
+    read -r -p "Delete these ${#orphans[@]} file(s)? [y/N]: " ans
+    if [[ "$ans" =~ ^[Yy]$ ]]; then
+        for o in "${orphans[@]}"; do rm -v "$o"; done
+        find "$CODEX_HOME/$d" -type d -empty -delete 2>/dev/null || true
+    else
+        echo "Skipped."
+    fi
+done
+
+echo ""
 echo "Done!"
