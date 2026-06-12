@@ -19,7 +19,9 @@ list_orphans() {
     local d="$1"
     local home_d="$CODEX_HOME/$d"
     local src_d="$CODEX_SRC/$d"
-    [ -d "$home_d" ] || return
+    # return 0 (not bare return) so the [ -d ] failure status doesn't propagate
+    # through the `n=$(... | wc -l)` pipefail and abort the script under set -e.
+    [ -d "$home_d" ] || return 0
     while IFS= read -r -d '' f; do
         local rel="${f#$home_d/}"
         [ -f "$src_d/$rel" ] || echo "$f"
@@ -67,14 +69,15 @@ echo ""
 echo "Syncing home/ -> ~/.codex/ ..."
 rsync -av --exclude='skills/.system/' "$CODEX_SRC/" "$CODEX_HOME/"
 
-# Orphan handling within managed subdirs (confirmed delete)
+# Orphan handling within managed subdirs (confirmed delete).
+# `|| ans=""` keeps EOF on stdin (non-interactive runs) from aborting under set -e.
 for d in "${MANAGED_DIRS[@]}"; do
     mapfile -t orphans < <(list_orphans "$d")
     [ ${#orphans[@]} -gt 0 ] || continue
     echo ""
     echo "Orphan files in ~/.codex/$d/ (present in dest but not in repo home/$d/):"
     for o in "${orphans[@]}"; do echo "  ${o#$CODEX_HOME/}"; done
-    read -r -p "Delete these ${#orphans[@]} file(s)? [y/N]: " ans
+    read -r -p "Delete these ${#orphans[@]} file(s)? [y/N]: " ans || ans=""
     if [[ "$ans" =~ ^[Yy]$ ]]; then
         for o in "${orphans[@]}"; do rm -v "$o"; done
         find "$CODEX_HOME/$d" -type d -empty -delete 2>/dev/null || true

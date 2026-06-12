@@ -9,6 +9,7 @@ Codex를 더 편하게 사용하기 위한 커스텀 skill, rule, 전역 지시�
   - `home/rules/dev-tools/` - 규칙 원문 (`~/.codex/rules/dev-tools/`로 sync)
   - `home/skills/` - 커스텀 skill 정의 (`SKILL.md` 형식)
 - `settings-notes.md` - Claude 설정 중 Codex에 그대로 적용할 수 없는 항목
+- `outdated/` - 퇴역한 skill·rule의 기록용 보관소. **sync 대상 아님.**
 - `README.md` (이 문서) - repo 자체를 다룰 때 참고하는 meta 문서. **sync 대상 아님.**
 - `_backup/` - `~/.codex` 동기화 전 백업
 

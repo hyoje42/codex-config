@@ -10,6 +10,7 @@ Codex를 더 편하게 사용하기 위한 커스텀 skill, rule, 전역 지시�
   - `home/AGENTS.md` — Codex 전역 지시문 (`~/.codex/AGENTS.md`로 sync). **이 파일은 sync payload이며, 본 meta 문서가 아니다.**
   - `home/rules/dev-tools/` — 규칙 원문 (`~/.codex/rules/dev-tools/`로 sync)
   - `home/skills/` — 커스텀 skill 정의 (`SKILL.md` 형식)
+- `outdated/` — 퇴역한 skill·rule의 기록용 보관소. **sync 대상 아님.** 사유는 [outdated/README.md](./outdated/README.md) 참고.
 - `AGENTS.md` (이 문서) — repo 자체를 다룰 때 참고하는 meta 문서. **sync 대상 아님.**
 - `README.md` — 사람용 개요. 동일 정보를 narrative 톤으로.
 - `settings-notes.md` — Claude 설정 중 Codex에 그대로 적용할 수 없는 항목 정리
