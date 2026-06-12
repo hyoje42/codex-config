@@ -29,7 +29,8 @@ compare_file() {
         echo "----------------------------------------"
         echo "  $rel_path"
         echo "----------------------------------------"
-        diff -u "$home_file" "$repo_file" --label "~/.codex/$rel_path" --label "repo/home/$rel_path" 2>/dev/null | tail -n +3
+        # `|| true` keeps diff's exit 1 (differences found) from aborting under set -e/pipefail
+        { diff -u "$home_file" "$repo_file" --label "~/.codex/$rel_path" --label "repo/home/$rel_path" 2>/dev/null || true; } | tail -n +3
         echo ""
     fi
 }

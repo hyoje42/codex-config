@@ -6,7 +6,7 @@
 
 - `env.CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS`
   - Claude 전용 실험 플래그다.
-  - Codex에는 같은 `TeamCreate`/`TaskCreate` 기능이 없어서 `setup-team-agents` skill을 Codex sub-agent 방식으로 재작성했다.
+  - Codex에는 같은 `TeamCreate`/`TaskCreate` 기능이 없어서 `setup-team-agents` skill을 Codex sub-agent 방식으로 재작성했었다. (해당 skill은 2026-06-12에 퇴역해 `outdated/`로 이동했다.)
 
 - `env.CLAUDE_CODE_DISABLE_ADAPTIVE_THINKING`
   - Claude 전용 환경 변수다.
