@@ -1,6 +1,6 @@
 # Claude settings.json 변환 메모
 
-`claude/settings.json`은 Claude Code 전용 설정이라 Codex에 그대로 적용하지 않았다.
+`claude-config/home/settings.json`은 Claude Code 전용 설정이라 Codex에 그대로 적용하지 않았다.
 
 ## Codex에 그대로 적용하지 않은 항목
 
@@ -25,9 +25,9 @@
 
 ## Codex에 반영한 방식
 
-- 언어/응답/도구 사용 규칙은 `AGENTS.md`와 `rules/`에 반영했다.
-- 커스텀 skill은 `skills/`에 반영했다.
-- 전역 반영은 `./codex-sync-to-home`으로 수행한다.
+- 언어/응답/도구 사용 규칙은 `home/AGENTS.md`와 `home/rules/`에 반영했다.
+- 커스텀 skill은 `home/skills/`에 반영했다.
+- `~/.codex/`로 전역 반영할 때는 `./codex-diff-with-home`으로 차이를 확인한 뒤, 사용자가 명시적으로 지시한 경우에만 `./codex-sync-to-home`을 실행한다.
 
 ## 수동 설정이 필요한 경우
 
