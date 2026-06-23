@@ -1,7 +1,9 @@
-# 백업 영역 (sync 대상 아님)
+# Editor
+.vscode/
+
+# Backup area (not synced)
 _backup
 
-# 머신 종속 실제 파일 방어 — local/ 에는 .example 템플릿만 커밋한다.
-# 실제 값을 채운 config.toml 을 local/ 에 두더라도 절대 커밋되지 않도록 한다.
-# (config.toml.example 은 이 패턴에 안 걸리므로 그대로 추적된다.)
+# Machine-specific real values (git-ignored) — only the .example template in local/ is committed.
+# (config.toml.example does not match this pattern, so it stays tracked.)
 config.toml
