@@ -25,7 +25,7 @@
 
 ## Codex에 반영한 방식
 
-- 언어/응답/도구 사용 규칙은 `home/AGENTS.md`와 `home/rules/`에 반영했다.
+- 언어/응답/도구 사용·git 커밋 규칙은 `home/AGENTS.md`에 반영했다(Codex 전역 규칙은 이 단일 파일 — `home/rules/`는 두지 않는다).
 - 커스텀 skill은 `home/skills/`에 반영했다.
 - `~/.codex/`로 전역 반영할 때는 `./codex-diff-with-home`으로 차이를 확인한 뒤, 사용자가 명시적으로 지시한 경우에만 `./codex-sync-to-home`을 실행한다.
 

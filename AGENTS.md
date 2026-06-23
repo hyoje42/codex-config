@@ -1,15 +1,15 @@
-# Codex 설정 관리 저장소 — 작업 안내
+# Codex Config Repo — Work Guide
 
-`dev-ai-tools`의 submodule. 구조·스크립트·머신 종속 메커니즘 등 개요는 [README.md](./README.md)에 있다. 이 문서는 agent가 이 repo를 수정·관리할 때 지킬 규칙만 담는다.
+A submodule of `dev-ai-tools`. For the overview (structure, scripts, machine-specific mechanism, etc.), see [README.md](./README.md). This document holds only the rules an agent must follow when editing/managing this repo.
 
-경로 지도: `home/`만 `~/.codex/`로 sync · `local/`은 머신 종속 템플릿(`*.example`) · 실제 머신 값은 `~/.codex/config.toml`(repo가 읽지 않음).
+Path map: only `home/` syncs to `~/.codex/` · `local/` holds machine-specific templates (`*.example`) · the real machine values live in `~/.codex/config.toml` (which the repo does not read).
 
-## 작업 규칙
+## Work rules
 
-- **sync 게이트**: `~/.codex/` 반영(`codex-sync-to-home` 실행이든 수동 복사든)은 **사용자가 명시적으로 지시했을 때만**. 평소엔 `codex-diff-with-home`으로 차이만 확인해 공유한다.
-- **sync 영역 경계**: `home/` 밖 파일을 sync 대상으로 옮기거나 그 반대를 하지 말 것.
-- **머신 종속 값**: `local/`의 `*.example`만 커밋. 실제 값(`~/.codex/config.toml` 등)은 커밋 금지. config.toml은 **seed-if-absent**(없을 때만 seed, 있으면 보존)이며 merge가 아니다.
-- **승인 규칙 보존**: `~/.codex/rules/default.rules`는 Codex 승인 규칙이라 이 repo가 덮어쓰지 않는다.
-- **커밋 순서**: submodule에서 먼저 commit → 부모에서 포인터 commit.
-- **메커니즘 무단 이식 금지**: claude-config의 settings merge 방식을 여기로(seed-if-absent를 그쪽으로) 옮기지 말 것.
-- **skill 작성·이식**: 형식과 Claude→Codex 변환 규칙은 [skill-authoring.md](./skill-authoring.md) 참고.
+- **Sync gate**: applying to `~/.codex/` (whether via `codex-sync-to-home` or a manual copy) happens **only when the user explicitly says so**. Normally just check the diff with `codex-diff-with-home` and share it.
+- **Sync-area boundary**: do not move files outside `home/` into the sync target, or vice versa.
+- **Machine-specific values**: commit only the `*.example` in `local/`. Do not commit the real values (`~/.codex/config.toml`, etc.). config.toml is **seed-if-absent** (seeded only when missing, preserved when present), not a merge.
+- **Preserve approval rules**: `~/.codex/rules/default.rules` is Codex's approval-rules file, so this repo does not overwrite it.
+- **Commit order**: commit in the submodule first → then commit the pointer bump in the parent.
+- **Do not port mechanisms**: do not move claude-config's settings-merge approach here (i.e., don't move seed-if-absent the other way either).
+- **Authoring/porting skills**: for the format and the Claude→Codex conversion rules, see [skill-authoring.md](./skill-authoring.md).
