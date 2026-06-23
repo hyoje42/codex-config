@@ -4,34 +4,49 @@ Codex를 더 편하게 사용하기 위한 커스텀 skill, rule, 전역 지시�
 
 ## 구조
 
-- `home/` - `~/.codex/`로 그대로 sync되는 영역. 이 폴더 안의 구조는 `~/.codex/` 레이아웃을 미러링한다.
-  - `home/AGENTS.md` - Codex 전역 지시문 (`~/.codex/AGENTS.md`로 sync)
-  - `home/rules/dev-tools/` - 규칙 원문 (`~/.codex/rules/dev-tools/`로 sync)
-  - `home/skills/` - 커스텀 skill 정의 (`SKILL.md` 형식)
-- `settings-notes.md` - Claude 설정 중 Codex에 그대로 적용할 수 없는 항목
-- `outdated/` - 퇴역한 skill·rule의 기록용 보관소. **sync 대상 아님.**
-- `README.md` (이 문서) - repo 자체를 다룰 때 참고하는 meta 문서. **sync 대상 아님.**
-- `_backup/` - `~/.codex` 동기화 전 백업. **수정 금지.**
+- `home/` — `~/.codex/`로 sync되는 영역. 폴더 구조가 `~/.codex/` 레이아웃을 그대로 미러링한다.
+  - `home/AGENTS.md` — Codex 전역 지시문 (`~/.codex/AGENTS.md`로 sync). **이 파일은 sync payload이며, repo meta 문서가 아니다.**
+  - `home/rules/dev-tools/` — 규칙 원문 (`~/.codex/rules/dev-tools/`로 sync)
+  - `home/skills/` — 커스텀 skill 정의 (`SKILL.md` 형식)
+- `local/` — **머신 종속 설정의 템플릿을 두는 곳 (sync 대상 아님).**
+  - `local/config.toml.example` — `~/.codex/config.toml`의 커밋용 템플릿. sync가 config.toml이 없는 머신에 한해 이 파일로 seed한다(아래 참고).
+- `settings-notes.md` — Claude 설정 중 Codex에 그대로 적용할 수 없는 항목 정리
+- `skill-authoring.md` — skill 작성·이식(Claude→Codex 변환) 가이드
+- `outdated/` — 퇴역한 skill·rule의 기록용 보관소. **sync 대상 아님.**
+- `README.md`(이 문서) — 이 repo 설명. / `AGENTS.md`(= `CLAUDE.md`) — agent 작업 규칙. 둘 다 **sync 대상 아님.**
+- `_backup/` — `~/.codex` 동기화 전 백업. **수정 금지.**
 
 ## 스크립트
 
-- `codex-sync-to-home` - `home/` 내용을 `~/.codex/`로 복사. **사용자가 명시적으로 지시했을 때만 실행할 것.**
-- `codex-diff-with-home` - `home/`과 `~/.codex/` 간 차이 확인
+- `codex-sync-to-home` — `home/` 내용을 `~/.codex/`로 복사한다. `~/.codex/config.toml`이 없는 머신에서는 `local/config.toml.example`로 한 번 seed한다(이미 있으면 건드리지 않음). **사용자가 명시적으로 지시했을 때만 실행한다.**
+- `codex-diff-with-home` — `home/`과 `~/.codex/`의 차이 확인. config.toml은 머신 종속이라 직접 비교하지 않고, sync가 config.toml에 무엇을 할지(seed/보존)를 안내한다.
 
 ## 작업 흐름
 
-1. 이 repo의 `home/` 하위에서 `AGENTS.md`, `rules/`, `skills/` 수정
-2. `./codex-diff-with-home`으로 차이 확인 후 사용자에게 결과 공유
-3. **사용자의 명시적 지시가 있을 때만** `./codex-sync-to-home`으로 `~/.codex/`에 반영 (스크립트 대신 수동 복사 등으로 `~/.codex/`를 변경하는 것도 동일하게 지시가 필요)
-4. Git commit으로 변경 이력 관리
+1. 공통 설정은 `home/` 하위(`AGENTS.md`·`rules/`·`skills/`)에서 수정한다. 머신 종속 값은 `~/.codex/config.toml`에서 직접 다룬다.
+2. `./codex-diff-with-home`으로 차이를 확인한 뒤 사용자에게 결과를 공유한다.
+3. **사용자의 명시적 지시가 있을 때만** `./codex-sync-to-home`으로 `~/.codex/`에 반영한다(스크립트 대신 수동 복사 등으로 `~/.codex/`를 바꾸는 것도 동일하게 지시가 필요).
+4. `git commit`으로 변경 이력을 남긴다(`local/`의 실제 머신 파일은 커밋되지 않는다).
 
-## Skill 작성 가이드
+## 머신 종속 설정 (config.toml seed)
 
-Codex skill은 `home/skills/<skill-name>/SKILL.md` 형식을 사용한다.
+Codex의 모델·reasoning effort·project trust 같은 값은 **머신마다 달라** git에 올리지 않는다. 이 값들은 `~/.codex/config.toml`에 들어가는데, config.toml은 **sync 대상이 아니다**(거의 전부가 머신 종속 값이라 공통 baseline을 둘 의미가 없다).
 
-- frontmatter에는 최소 `name`, `description`을 둔다.
-- 스크립트나 참고 문서는 skill 디렉터리 내부에 함께 둔다.
-- Claude 전용 도구명이나 경로(`.claude`, `TeamCreate`, `TaskCreate` 등)는 Codex 도구와 경로로 바꾼다.
+대신 **seed-if-absent** 방식으로 다룬다.
+
+**셋업**
+
+1. 새 머신에 `~/.codex/config.toml`이 없으면, `./codex-sync-to-home`이 `local/config.toml.example`을 한 번 복사해 seed한다.
+2. 이후 `~/.codex/config.toml`을 직접 열어 model·reasoning effort·project trust 등을 채워 넣는다.
+
+**동작**
+
+- `~/.codex/config.toml`이 **없을 때만** `local/config.toml.example`로 seed한다. **이미 있으면 절대 덮어쓰지 않는다**(직접 편집한 값을 보존).
+- `codex-diff-with-home`은 config.toml을 직접 diff하지 않고, "없음 → seed 예정" / "있음 → 건드리지 않음"을 `ⓘ`로 안내한다(= sync하면 config.toml에 무엇이 일어날지).
+
+> 실제 머신 값을 채운 파일은 `~/.codex/config.toml`에 두고 절대 커밋하지 말 것. `local/`에 실수로 실제 `config.toml`을 두더라도 `.gitignore`가 막는다(`.example` 템플릿만 추적됨).
+
+**Claude(claude-config)와의 차이**: Claude는 공통 baseline(`home/settings.json`)과 머신 override(`local/settings.override.json`)를 sync마다 **deep-merge**해 `~/.claude/settings.json`에 쓴다. Codex는 config.toml이 거의 전부 머신 값이라 merge할 공통 baseline이 사실상 없으므로, **seed 후 직접 편집** 방식을 쓴다. 배치(`local/`·`.example`)·문서·스크립트 출력은 양쪽을 대칭으로 맞췄지만, 적용 메커니즘은 도구 특성에 맞게 다르다.
 
 ## 제외한 항목
 

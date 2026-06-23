@@ -37,7 +37,17 @@ for d in "${MANAGED_DIRS[@]}"; do
     orphan_count=$((orphan_count + n))
 done
 
-if [ "$sync_changes" -eq 0 ] && [ "$orphan_count" -eq 0 ]; then
+# config.toml is local-only: it never lives in home/ and is never overwritten.
+# We only *seed* it from the repo template (local/config.toml.example) on a
+# machine that doesn't have one yet (e.g. a fresh clone). An existing
+# config.toml is left untouched.
+CONFIG_EXAMPLE="$CODEX_REPO/local/config.toml.example"
+need_seed=0
+if [ ! -f "$CODEX_HOME/config.toml" ] && [ -f "$CONFIG_EXAMPLE" ]; then
+    need_seed=1
+fi
+
+if [ "$sync_changes" -eq 0 ] && [ "$orphan_count" -eq 0 ] && [ "$need_seed" -eq 0 ]; then
     echo "No changes."
     exit 0
 fi
@@ -46,7 +56,7 @@ fi
 timestamp=$(date +"%Y-%m-%d_%H-%M-%S")
 backup_target="$BACKUP_DIR/$timestamp"
 mkdir -p "$backup_target"
-echo "Backing up managed parts of ~/.codex to _backup/$timestamp ..."
+echo "Backing up ~/.codex → _backup/$timestamp"
 for d in "${MANAGED_DIRS[@]}"; do
     src="$CODEX_HOME/$d"
     [ -d "$src" ] || continue
@@ -66,8 +76,18 @@ find "$BACKUP_DIR" -mindepth 1 -maxdepth 1 -type d | sort -r \
 
 # Sync home/ -> ~/.codex/ (add/update only; skills/.system/ preserved)
 echo ""
-echo "Syncing home/ -> ~/.codex/ ..."
-rsync -av --exclude='skills/.system/' "$CODEX_SRC/" "$CODEX_HOME/"
+echo "Syncing home/ → ~/.codex ..."
+rsync -a --exclude='skills/.system/' "$CODEX_SRC/" "$CODEX_HOME/"
+
+# Seed config.toml on first run only; never overwrite an existing one.
+if [ "$need_seed" -eq 1 ]; then
+    echo ""
+    echo "✓ config.toml seeded (local/config.toml.example → ~/.codex/config.toml, first run only)"
+    cp "$CONFIG_EXAMPLE" "$CODEX_HOME/config.toml"
+elif [ -f "$CODEX_HOME/config.toml" ]; then
+    echo ""
+    echo "ⓘ ~/.codex/config.toml exists — left untouched."
+fi
 
 # Orphan handling within managed subdirs (confirmed delete).
 # `|| ans=""` keeps EOF on stdin (non-interactive runs) from aborting under set -e.

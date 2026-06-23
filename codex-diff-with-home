@@ -10,6 +10,21 @@ CODEX_HOME="$HOME/.codex"
 # skills/.system/ is Codex-owned and excluded.
 MANAGED_DIRS=("rules/dev-tools" "skills")
 
+# config.toml is machine-local: it lives only in ~/.codex/ (never in home/), so
+# it is not part of the file-by-file diff below. Instead we announce what a sync
+# would DO to it — seed it on a fresh machine, or leave an existing one
+# untouched — so this preview reflects sync's actual behaviour.
+print_config_note() {
+    local example="$CODEX_REPO/local/config.toml.example"
+    if [ -f "$CODEX_HOME/config.toml" ]; then
+        echo "ⓘ config.toml: 이미 존재 → sync가 건드리지 않습니다 (직접 편집 대상)."
+    elif [ -f "$example" ]; then
+        echo "ⓘ config.toml: 없음 → sync 시 local/config.toml.example에서 seed됩니다 (최초 1회)."
+    else
+        echo "⚠ config.toml 없음 + local/config.toml.example 없음 → seed되지 않습니다."
+    fi
+}
+
 changed_files=()
 new_files=()
 deleted_files=()
@@ -26,9 +41,9 @@ compare_file() {
 
     if ! diff -q "$repo_file" "$home_file" > /dev/null 2>&1; then
         changed_files+=("$rel_path")
-        echo "----------------------------------------"
+        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
         echo "  $rel_path"
-        echo "----------------------------------------"
+        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
         # `|| true` keeps diff's exit 1 (differences found) from aborting under set -e/pipefail
         { diff -u "$home_file" "$repo_file" --label "~/.codex/$rel_path" --label "repo/home/$rel_path" 2>/dev/null || true; } | tail -n +3
         echo ""
@@ -36,7 +51,9 @@ compare_file() {
 }
 
 echo ""
-echo "Comparing repo/home -> ~/.codex ..."
+echo "Comparing repo/home → ~/.codex"
+echo ""
+print_config_note
 echo ""
 
 # Iterate every file in home/ (top-level + managed subdirs covered here)
@@ -65,7 +82,7 @@ echo "  Summary"
 echo "==========================================="
 
 if [ ${#changed_files[@]} -eq 0 ] && [ ${#new_files[@]} -eq 0 ] && [ ${#deleted_files[@]} -eq 0 ]; then
-    echo "  No differences found."
+    echo "  ✓ 차이 없음 — ~/.codex가 이미 최신입니다."
 else
     if [ ${#changed_files[@]} -gt 0 ]; then
         echo ""
@@ -90,4 +107,7 @@ else
     fi
 fi
 
+# Short recap so config.toml's handling stays visible after a long diff.
+echo ""
+echo "  ↳ config.toml은 위 diff에 없습니다 (sync는 seed 또는 보존만 함 — 위 ⓘ 참고)."
 echo ""
