@@ -61,3 +61,5 @@ Codex의 모델·reasoning effort·project trust 같은 값은 **머신마다 �
 - `home/skills/` -> `~/.codex/skills/`
 
 `~/.codex/rules/default.rules`는 Codex 승인 규칙 파일이므로 이 저장소가 덮어쓰지 않는다.
+
+> **2026-06-23 이전에 sync한 머신**: 당시 함께 sync됐던 `~/.codex/rules/dev-tools/`가 잔류할 수 있다. Codex가 지시문으로 읽지 않아 무해하지만, `rm -rf ~/.codex/rules/dev-tools/`로 정리하면 깔끔하다.

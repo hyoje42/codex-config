@@ -27,7 +27,7 @@ When project-specific instructions exist, prefer them, but keep these global ins
 
 ## Git Commit
 
-- Never run `git commit` on your own initiative. When asked to commit or to generate a message, **propose** the message first and commit only after the user approves. Ambiguous phrasing like "sync to git" is not a commit instruction.
+- Never run `git commit` on your own initiative. When asked to commit or to generate a message, **propose** the message first and commit only after the user approves. Ambiguous phrasing like "sync to git" does not mean commit.
 - Always write commit messages in English, regardless of the conversation language.
 - Follow conventional commit format (feat, fix, refactor, docs, test, chore, etc.).
 - Keep the title concise (under 50 characters) and in imperative mood ("add", not "added"). Add a body only when the change needs explanation; mark breaking changes explicitly.
@@ -39,5 +39,6 @@ When no project-specific instruction says otherwise, author a project's agent in
 
 - Keep AGENTS.md focused on **development-relevant** content: build/test/run commands, code conventions, architecture entry points, and the work rules an agent needs.
 - Keep it **concise**. Don't duplicate detail that already lives elsewhere — **point to** the canonical document (README, design docs, specific source files) instead. AGENTS.md is an index of rules and pointers, not a copy of every document.
-- To serve both Claude Code and Codex from one source, keep the real content in AGENTS.md and make CLAUDE.md a single-line `@AGENTS.md` import. Codex reads AGENTS.md natively; Claude Code reads CLAUDE.md (→ import).
+- Add or extend these files only when an agent genuinely needs the guidance — skip trivial or throwaway repos.
+- Use the single-source pattern only when the user explicitly asks for both files, or the repo already uses it: keep the real content in AGENTS.md and make CLAUDE.md a single-line `@AGENTS.md` import (Codex reads AGENTS.md natively; Claude Code reads CLAUDE.md → import). Otherwise author only the file you were asked for — if the user asks for a CLAUDE.md only, write just that, and don't restructure an existing instruction file uninvited.
 - These are defaults; an explicit user instruction takes precedence.
