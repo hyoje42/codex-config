@@ -1,12 +1,11 @@
 # Codex 설정 관리 저장소
 
-Codex를 더 편하게 사용하기 위한 커스텀 skill, rule, 전역 지시문을 만들고 `~/.codex/`에 동기화하는 저장소.
+Codex를 더 편하게 사용하기 위한 커스텀 skill과 전역 지시문(AGENTS.md)을 만들고 `~/.codex/`에 동기화하는 저장소.
 
 ## 구조
 
 - `home/` — `~/.codex/`로 sync되는 영역. 폴더 구조가 `~/.codex/` 레이아웃을 그대로 미러링한다.
-  - `home/AGENTS.md` — Codex 전역 지시문 (`~/.codex/AGENTS.md`로 sync). **이 파일은 sync payload이며, repo meta 문서가 아니다.**
-  - `home/rules/dev-tools/` — 규칙 원문 (`~/.codex/rules/dev-tools/`로 sync)
+  - `home/AGENTS.md` — Codex 전역 지시문 (`~/.codex/AGENTS.md`로 sync). **Codex가 로드하는 전역 규칙은 이 단일 파일이다**(`~/.codex/rules/`는 지시문으로 로드되지 않음). 이 파일은 sync payload이며, repo meta 문서가 아니다.
   - `home/skills/` — 커스텀 skill 정의 (`SKILL.md` 형식)
 - `local/` — **머신 종속 설정의 템플릿을 두는 곳 (sync 대상 아님).**
   - `local/config.toml.example` — `~/.codex/config.toml`의 커밋용 템플릿. sync가 config.toml이 없는 머신에 한해 이 파일로 seed한다(아래 참고).
@@ -23,7 +22,7 @@ Codex를 더 편하게 사용하기 위한 커스텀 skill, rule, 전역 지시�
 
 ## 작업 흐름
 
-1. 공통 설정은 `home/` 하위(`AGENTS.md`·`rules/`·`skills/`)에서 수정한다. 머신 종속 값은 `~/.codex/config.toml`에서 직접 다룬다.
+1. 공통 설정은 `home/` 하위(`AGENTS.md`·`skills/`)에서 수정한다. 머신 종속 값은 `~/.codex/config.toml`에서 직접 다룬다.
 2. `./codex-diff-with-home`으로 차이를 확인한 뒤 사용자에게 결과를 공유한다.
 3. **사용자의 명시적 지시가 있을 때만** `./codex-sync-to-home`으로 `~/.codex/`에 반영한다(스크립트 대신 수동 복사 등으로 `~/.codex/`를 바꾸는 것도 동일하게 지시가 필요).
 4. `git commit`으로 변경 이력을 남긴다(`local/`의 실제 머신 파일은 커밋되지 않는다).
@@ -60,6 +59,5 @@ Codex의 모델·reasoning effort·project trust 같은 값은 **머신마다 �
 
 - `home/AGENTS.md` -> `~/.codex/AGENTS.md`
 - `home/skills/` -> `~/.codex/skills/`
-- `home/rules/dev-tools/` -> `~/.codex/rules/dev-tools/`
 
 `~/.codex/rules/default.rules`는 Codex 승인 규칙 파일이므로 이 저장소가 덮어쓰지 않는다.

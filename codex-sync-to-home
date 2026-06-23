@@ -8,10 +8,10 @@ CODEX_HOME="$HOME/.codex"
 BACKUP_DIR="$CODEX_REPO/_backup"
 MAX_BACKUPS=5
 
-# Subdirectories we fully manage. Orphan files inside these are listed and
-# offered for deletion with confirmation. skills/.system/ is Codex-owned
-# and excluded from sync and orphan checks.
-MANAGED_DIRS=("rules/dev-tools" "skills")
+# 우리가 완전히 관리하는 하위 디렉터리. 이 안의 고아 파일은 목록으로 보여주고
+# 확인을 거쳐 삭제를 제안한다. skills/.system/는 Codex 소유라 sync와
+# 고아 검사에서 모두 제외한다.
+MANAGED_DIRS=("skills")
 
 mkdir -p "$CODEX_HOME" "$BACKUP_DIR"
 
@@ -19,8 +19,8 @@ list_orphans() {
     local d="$1"
     local home_d="$CODEX_HOME/$d"
     local src_d="$CODEX_SRC/$d"
-    # return 0 (not bare return) so the [ -d ] failure status doesn't propagate
-    # through the `n=$(... | wc -l)` pipefail and abort the script under set -e.
+    # bare return 대신 return 0을 써서 [ -d ] 실패 상태가
+    # `n=$(... | wc -l)`의 pipefail로 전파돼 set -e에서 스크립트를 중단시키지 않게 한다.
     [ -d "$home_d" ] || return 0
     while IFS= read -r -d '' f; do
         local rel="${f#$home_d/}"
@@ -28,7 +28,7 @@ list_orphans() {
     done < <(find "$home_d" -type d -name '.system' -prune -o -type f -print0 2>/dev/null)
 }
 
-# Detect changes (rsync dry-run) and orphans before doing anything
+# 무언가 하기 전에 변경 사항(rsync dry-run)과 고아 파일을 먼저 감지한다
 sync_changes=$(rsync -an --itemize-changes --exclude='skills/.system/' \
     "$CODEX_SRC/" "$CODEX_HOME/" 2>/dev/null | grep -cE '^[<>ch]' || true)
 orphan_count=0
@@ -37,10 +37,10 @@ for d in "${MANAGED_DIRS[@]}"; do
     orphan_count=$((orphan_count + n))
 done
 
-# config.toml is local-only: it never lives in home/ and is never overwritten.
-# We only *seed* it from the repo template (local/config.toml.example) on a
-# machine that doesn't have one yet (e.g. a fresh clone). An existing
-# config.toml is left untouched.
+# config.toml은 머신 전용이다: home/에는 없고 절대 덮어쓰지 않는다.
+# config.toml이 아직 없는 머신(예: 새로 clone한 경우)에서만 repo 템플릿
+# (local/config.toml.example)으로부터 *seed*만 한다. 기존 config.toml은
+# 건드리지 않는다.
 CONFIG_EXAMPLE="$CODEX_REPO/local/config.toml.example"
 need_seed=0
 if [ ! -f "$CODEX_HOME/config.toml" ] && [ -f "$CONFIG_EXAMPLE" ]; then
@@ -48,15 +48,15 @@ if [ ! -f "$CODEX_HOME/config.toml" ] && [ -f "$CONFIG_EXAMPLE" ]; then
 fi
 
 if [ "$sync_changes" -eq 0 ] && [ "$orphan_count" -eq 0 ] && [ "$need_seed" -eq 0 ]; then
-    echo "No changes."
+    echo "변경 사항 없음."
     exit 0
 fi
 
-# Backup managed state before overwrite
+# 덮어쓰기 전에 관리 대상 상태를 백업한다
 timestamp=$(date +"%Y-%m-%d_%H-%M-%S")
 backup_target="$BACKUP_DIR/$timestamp"
 mkdir -p "$backup_target"
-echo "Backing up ~/.codex → _backup/$timestamp"
+echo "~/.codex 백업 중 → _backup/$timestamp"
 for d in "${MANAGED_DIRS[@]}"; do
     src="$CODEX_HOME/$d"
     [ -d "$src" ] || continue
@@ -70,41 +70,41 @@ for f in "$CODEX_SRC"/*; do
     [ -f "$CODEX_HOME/$bn" ] && cp -a "$CODEX_HOME/$bn" "$backup_target/"
 done
 
-# Prune old backups
+# 오래된 백업 정리
 find "$BACKUP_DIR" -mindepth 1 -maxdepth 1 -type d | sort -r \
     | tail -n +$((MAX_BACKUPS + 1)) | xargs -r rm -rf
 
-# Sync home/ -> ~/.codex/ (add/update only; skills/.system/ preserved)
+# home/ -> ~/.codex/ sync (추가/갱신만; skills/.system/는 보존)
 echo ""
-echo "Syncing home/ → ~/.codex ..."
+echo "home/ → ~/.codex sync 중 ..."
 rsync -a --exclude='skills/.system/' "$CODEX_SRC/" "$CODEX_HOME/"
 
-# Seed config.toml on first run only; never overwrite an existing one.
+# config.toml은 최초 실행 때만 seed; 기존 파일은 절대 덮어쓰지 않는다.
 if [ "$need_seed" -eq 1 ]; then
     echo ""
-    echo "✓ config.toml seeded (local/config.toml.example → ~/.codex/config.toml, first run only)"
+    echo "✓ config.toml seed 완료 (local/config.toml.example → ~/.codex/config.toml, 최초 1회만)"
     cp "$CONFIG_EXAMPLE" "$CODEX_HOME/config.toml"
 elif [ -f "$CODEX_HOME/config.toml" ]; then
     echo ""
-    echo "ⓘ ~/.codex/config.toml exists — left untouched."
+    echo "ⓘ ~/.codex/config.toml 존재 — 건드리지 않음."
 fi
 
-# Orphan handling within managed subdirs (confirmed delete).
-# `|| ans=""` keeps EOF on stdin (non-interactive runs) from aborting under set -e.
+# 관리 대상 하위 디렉터리 안의 고아 파일 처리 (확인 후 삭제).
+# `|| ans=""`로 stdin의 EOF(비대화형 실행)가 set -e에서 스크립트를 중단시키지 않게 한다.
 for d in "${MANAGED_DIRS[@]}"; do
     mapfile -t orphans < <(list_orphans "$d")
     [ ${#orphans[@]} -gt 0 ] || continue
     echo ""
-    echo "Orphan files in ~/.codex/$d/ (present in dest but not in repo home/$d/):"
+    echo "~/.codex/$d/의 고아 파일 (대상에는 있지만 repo home/$d/에는 없음):"
     for o in "${orphans[@]}"; do echo "  ${o#$CODEX_HOME/}"; done
-    read -r -p "Delete these ${#orphans[@]} file(s)? [y/N]: " ans || ans=""
+    read -r -p "이 ${#orphans[@]}개 파일을 삭제할까요? [y/N]: " ans || ans=""
     if [[ "$ans" =~ ^[Yy]$ ]]; then
         for o in "${orphans[@]}"; do rm -v "$o"; done
         find "$CODEX_HOME/$d" -type d -empty -delete 2>/dev/null || true
     else
-        echo "Skipped."
+        echo "건너뜀."
     fi
 done
 
 echo ""
-echo "Done!"
+echo "완료!"

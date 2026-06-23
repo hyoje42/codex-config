@@ -6,14 +6,14 @@ CODEX_REPO="$(cd "$(dirname "$0")" && pwd)"
 CODEX_SRC="$CODEX_REPO/home"
 CODEX_HOME="$HOME/.codex"
 
-# Subdirectories we fully manage. Orphans are reported only for these.
-# skills/.system/ is Codex-owned and excluded.
-MANAGED_DIRS=("rules/dev-tools" "skills")
+# 우리가 완전히 관리하는 하위 디렉터리. 고아 파일은 이들에 대해서만 보고한다.
+# skills/.system/는 Codex 소유라 제외한다.
+MANAGED_DIRS=("skills")
 
-# config.toml is machine-local: it lives only in ~/.codex/ (never in home/), so
-# it is not part of the file-by-file diff below. Instead we announce what a sync
-# would DO to it — seed it on a fresh machine, or leave an existing one
-# untouched — so this preview reflects sync's actual behaviour.
+# config.toml은 머신 종속이다: ~/.codex/에만 있고(home/에는 없음), 그래서
+# 아래 파일별 diff에는 포함되지 않는다. 대신 sync가 config.toml에 무엇을
+# 할지 — 새 머신이면 seed, 기존 파일이면 그대로 보존 — 알려줘서
+# 이 미리보기가 sync의 실제 동작을 반영하도록 한다.
 print_config_note() {
     local example="$CODEX_REPO/local/config.toml.example"
     if [ -f "$CODEX_HOME/config.toml" ]; then
@@ -44,26 +44,26 @@ compare_file() {
         echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
         echo "  $rel_path"
         echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-        # `|| true` keeps diff's exit 1 (differences found) from aborting under set -e/pipefail
+        # `|| true`로 diff의 exit 1(차이 있음)이 set -e/pipefail에서 스크립트를 중단시키지 않게 한다
         { diff -u "$home_file" "$repo_file" --label "~/.codex/$rel_path" --label "repo/home/$rel_path" 2>/dev/null || true; } | tail -n +3
         echo ""
     fi
 }
 
 echo ""
-echo "Comparing repo/home → ~/.codex"
+echo "repo/home → ~/.codex 비교 중"
 echo ""
 print_config_note
 echo ""
 
-# Iterate every file in home/ (top-level + managed subdirs covered here)
+# home/의 모든 파일을 순회한다 (최상위 + 관리 대상 하위 디렉터리 모두 여기서 처리)
 while IFS= read -r -d '' repo_file; do
     rel_path="${repo_file#$CODEX_SRC/}"
     compare_file "$rel_path"
 done < <(find "$CODEX_SRC" -type f -print0 2>/dev/null)
 
-# Orphans: files in managed subdirs in ~/.codex/ that are absent in home/
-# Excludes skills/.system/ (Codex-owned).
+# 고아 파일: ~/.codex/의 관리 대상 하위 디렉터리에 있지만 home/에는 없는 파일
+# skills/.system/(Codex 소유)는 제외한다.
 for d in "${MANAGED_DIRS[@]}"; do
     home_d="$CODEX_HOME/$d"
     src_d="$CODEX_SRC/$d"
@@ -78,7 +78,7 @@ for d in "${MANAGED_DIRS[@]}"; do
 done
 
 echo "==========================================="
-echo "  Summary"
+echo "  요약"
 echo "==========================================="
 
 if [ ${#changed_files[@]} -eq 0 ] && [ ${#new_files[@]} -eq 0 ] && [ ${#deleted_files[@]} -eq 0 ]; then
@@ -86,28 +86,28 @@ if [ ${#changed_files[@]} -eq 0 ] && [ ${#new_files[@]} -eq 0 ] && [ ${#deleted_
 else
     if [ ${#changed_files[@]} -gt 0 ]; then
         echo ""
-        echo "  Modified (${#changed_files[@]}):"
+        echo "  변경됨 (${#changed_files[@]}):"
         for f in "${changed_files[@]}"; do
             echo "    M  $f"
         done
     fi
     if [ ${#new_files[@]} -gt 0 ]; then
         echo ""
-        echo "  New in repo (${#new_files[@]}):"
+        echo "  repo에 새로 추가 (${#new_files[@]}):"
         for f in "${new_files[@]}"; do
             echo "    +  $f"
         done
     fi
     if [ ${#deleted_files[@]} -gt 0 ]; then
         echo ""
-        echo "  Only in ~/.codex (${#deleted_files[@]}):"
+        echo "  ~/.codex에만 있음 (${#deleted_files[@]}):"
         for f in "${deleted_files[@]}"; do
             echo "    -  $f"
         done
     fi
 fi
 
-# Short recap so config.toml's handling stays visible after a long diff.
+# 긴 diff 뒤에도 config.toml 처리 방식이 보이도록 짧게 다시 안내한다.
 echo ""
 echo "  ↳ config.toml은 위 diff에 없습니다 (sync는 seed 또는 보존만 함 — 위 ⓘ 참고)."
 echo ""

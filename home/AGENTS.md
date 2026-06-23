@@ -1,26 +1,43 @@
 # Codex Global Instructions
 
-프로젝트별 지시문이 별도로 있는 경우에는 그 지시문을 우선 고려하되, 충돌하지 않는 범위에서 이 전역 지시문을 유지한다.
+When project-specific instructions exist, prefer them, but keep these global instructions where they don't conflict.
 
 ## Response Format
 
-- 사용자가 다른 언어를 명시하지 않으면 한국어로 답한다.
-- 코드 식별자, 명령어, 파일명, 라이브러리명 같은 기술 용어는 원문을 유지해도 된다.
-- 파일을 수정하기 전에는 무엇을 왜 바꾸는지 짧게 설명한다.
-- 코드나 파일을 언급할 때는 가능한 한 클릭 가능한 절대 경로 markdown 링크를 사용한다.
-- 논리적으로 묶이는 변경은 한 번에 제안하거나 적용한다.
-- 불필요하게 장황한 설명보다, 지금 사용자가 판단하거나 다음 행동을 하는 데 필요한 정보를 우선한다.
+- Respond in Korean unless the user specifies another language.
+- Technical terms such as code identifiers, commands, filenames, and library names may stay in their original form.
+- Before editing a file, briefly explain what you're changing and why.
+- When referring to code or files, use clickable absolute-path markdown links where possible.
+- Propose or apply logically related changes together.
+- Prefer the information the user needs to decide or act next over unnecessarily verbose explanation.
 
 ## Tool Usage
 
-- 파일 관련 명령은 워크스페이스 루트 기준 상대 경로를 먼저 사용한다.
-- 검색은 `rg` 또는 `rg --files`를 우선 사용한다.
-- 민감 정보로 보이는 파일(`.env`, 개인 키, credential, token, kube/aws/docker 설정 등)은 필요 없으면 읽거나 검색하지 않는다.
-- 사용자가 명시적으로 요청하지 않은 파괴적 변경(`rm`, 강제 checkout/reset 등)은 실행하지 않는다.
-- 기존 작업물이 섞여 있을 수 있으므로, 내가 만들지 않은 변경은 되돌리지 않는다.
+- For file-related commands, try workspace-root-relative paths first.
+- Prefer `rg` or `rg --files` for searching.
+- Don't read or search files that look sensitive (`.env`, private keys, credentials, tokens, kube/aws/docker config, etc.) unless they're needed.
+- Don't run destructive changes the user didn't explicitly request (`rm`, force checkout/reset, etc.).
+- Existing work may be mixed in, so don't revert changes you didn't make.
 
 ## Python
 
-1. 워크스페이스 루트에 `.venv`가 있는지 확인한다.
-2. 있으면 `source .venv/bin/activate && <python_command>` 형태로 실행한다.
-3. 없으면 Python 명령을 직접 실행한다.
+1. Check whether a `.venv` exists at the workspace root.
+2. If it exists, run as `source .venv/bin/activate && <python_command>`.
+3. If not, run the Python command directly.
+
+## Git Commit
+
+- Never run `git commit` on your own initiative. When asked to commit or to generate a message, **propose** the message first and commit only after the user approves. Ambiguous phrasing like "sync to git" is not a commit instruction.
+- Always write commit messages in English, regardless of the conversation language.
+- Follow conventional commit format (feat, fix, refactor, docs, test, chore, etc.).
+- Keep the title concise (under 50 characters) and in imperative mood ("add", not "added"). Add a body only when the change needs explanation; mark breaking changes explicitly.
+- Do NOT add AI co-author trailers (e.g., `Co-Authored-By: Claude`, `Co-Authored-By: Codex`) or generator footers (e.g., `🤖 Generated with ...`).
+
+## Authoring Agent Instruction Files
+
+When no project-specific instruction says otherwise, author a project's agent instruction files (AGENTS.md / CLAUDE.md) by these defaults:
+
+- Keep AGENTS.md focused on **development-relevant** content: build/test/run commands, code conventions, architecture entry points, and the work rules an agent needs.
+- Keep it **concise**. Don't duplicate detail that already lives elsewhere — **point to** the canonical document (README, design docs, specific source files) instead. AGENTS.md is an index of rules and pointers, not a copy of every document.
+- To serve both Claude Code and Codex from one source, keep the real content in AGENTS.md and make CLAUDE.md a single-line `@AGENTS.md` import. Codex reads AGENTS.md natively; Claude Code reads CLAUDE.md (→ import).
+- These are defaults; an explicit user instruction takes precedence.
