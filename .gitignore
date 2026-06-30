@@ -4,6 +4,7 @@
 # Backup area (not synced)
 _backup
 
-# Machine-specific real values (git-ignored) — only the .example template in local/ is committed.
-# (config.toml.example does not match this pattern, so it stays tracked.)
-config.toml
+# Machine-specific area: ignore everything in local/, commit only the *.example
+# templates. New real-value files under local/ are then ignored automatically.
+local/*
+!local/*.example

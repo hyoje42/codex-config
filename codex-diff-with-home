@@ -25,6 +25,23 @@ print_config_note() {
     fi
 }
 
+# .bashrc codex 래퍼도 머신 종속이라 파일별 diff에는 없다. sync가 ~/.bashrc에
+# 무엇을 할지(설치/보존/아무것도 안 함)를 미리 안내해 이 미리보기가 실제 동작을
+# 반영하게 한다. 판정 기준은 codex-sync-to-home의 need_wrapper 로직과 동일하다.
+print_wrapper_note() {
+    local real="$CODEX_REPO/local/codex-proxy-wrapper.sh"
+    local marker="# >>> codex proxy wrapper >>>"
+    if grep -qF "$marker" "$HOME/.bashrc" 2>/dev/null; then
+        echo "ⓘ codex 래퍼: ~/.bashrc에 이미 있음 → sync가 건드리지 않습니다."
+    elif [ ! -f "$real" ]; then
+        echo "ⓘ codex 래퍼: local/codex-proxy-wrapper.sh 없음 → sync가 아무것도 하지 않습니다 (.example만으론 설치 안 함)."
+    elif grep -qF '<PROXY_HOST>' "$real"; then
+        echo "⚠ codex 래퍼: local/codex-proxy-wrapper.sh에 placeholder 남음 → 실제 값으로 채우면 sync가 ~/.bashrc에 설치합니다."
+    else
+        echo "ⓘ codex 래퍼: ~/.bashrc에 없음 → sync 시 local/codex-proxy-wrapper.sh에서 ~/.bashrc에 설치됩니다."
+    fi
+}
+
 changed_files=()
 new_files=()
 deleted_files=()
@@ -54,6 +71,7 @@ echo ""
 echo "repo/home → ~/.codex 비교 중"
 echo ""
 print_config_note
+print_wrapper_note
 echo ""
 
 # home/의 모든 파일을 순회한다 (최상위 + 관리 대상 하위 디렉터리 모두 여기서 처리)
@@ -109,5 +127,5 @@ fi
 
 # 긴 diff 뒤에도 config.toml 처리 방식이 보이도록 짧게 다시 안내한다.
 echo ""
-echo "  ↳ config.toml은 위 diff에 없습니다 (sync는 seed 또는 보존만 함 — 위 ⓘ 참고)."
+echo "  ↳ config.toml·codex 래퍼는 위 diff에 없습니다 (머신 종속 — sync 동작은 위 ⓘ 참고)."
 echo ""

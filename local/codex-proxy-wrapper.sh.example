@@ -1,0 +1,12 @@
+# Codex proxy/CA login wrapper — injects proxy + CA env only when running codex.
+# Machine-specific template; fill in the values. Setup: codex-config/README.md.
+# >>> codex proxy wrapper >>>
+codex() {
+  HTTPS_PROXY="http://<PROXY_HOST>:<PORT>" \
+  https_proxy="http://<PROXY_HOST>:<PORT>" \
+  NO_PROXY="localhost,127.0.0.1,<no-proxy-domains>,::1" \
+  no_proxy="localhost,127.0.0.1,<no-proxy-domains>,::1" \
+  CODEX_CA_CERTIFICATE="/absolute/path/to/ca-bundle.pem" \
+  command codex "$@"
+}
+# <<< codex proxy wrapper <<<
