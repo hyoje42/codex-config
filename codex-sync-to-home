@@ -47,7 +47,27 @@ if [ ! -f "$CODEX_HOME/config.toml" ] && [ -f "$CONFIG_EXAMPLE" ]; then
     need_seed=1
 fi
 
-if [ "$sync_changes" -eq 0 ] && [ "$orphan_count" -eq 0 ] && [ "$need_seed" -eq 0 ]; then
+# .bashrc codex 래퍼(프록시·CA)도 머신 종속이라 home/ sync가 아니라
+# local/의 실제 래퍼 파일에서 ~/.bashrc로 append-if-absent 한다(방식 A).
+#   - ~/.bashrc에 마커가 이미 있으면        → 보존(건드리지 않음)
+#   - local/codex-proxy-wrapper.sh(실제값)가 없으면 → 아무것도 안 함(.example만으론 설치 안 함)
+#   - 실제 파일에 placeholder가 남아 있으면   → 설치 보류(깨진 값이 ~/.bashrc로 새는 것 방지)
+WRAPPER_REAL="$CODEX_REPO/local/codex-proxy-wrapper.sh"
+WRAPPER_RC="$HOME/.bashrc"
+WRAPPER_MARKER="# >>> codex proxy wrapper >>>"
+need_wrapper=0
+wrapper_skip_reason=""
+if grep -qF "$WRAPPER_MARKER" "$WRAPPER_RC" 2>/dev/null; then
+    wrapper_skip_reason="present"
+elif [ ! -f "$WRAPPER_REAL" ]; then
+    wrapper_skip_reason="no-real"
+elif grep -qF '<PROXY_HOST>' "$WRAPPER_REAL"; then
+    wrapper_skip_reason="placeholder"
+else
+    need_wrapper=1
+fi
+
+if [ "$sync_changes" -eq 0 ] && [ "$orphan_count" -eq 0 ] && [ "$need_seed" -eq 0 ] && [ "$need_wrapper" -eq 0 ]; then
     echo "변경 사항 없음."
     exit 0
 fi
@@ -69,6 +89,10 @@ for f in "$CODEX_SRC"/*; do
     bn=$(basename "$f")
     [ -f "$CODEX_HOME/$bn" ] && cp -a "$CODEX_HOME/$bn" "$backup_target/"
 done
+# 래퍼를 추가할 거라면 수정 전 ~/.bashrc도 백업한다(append만 하지만 안전하게).
+if [ "$need_wrapper" -eq 1 ] && [ -f "$WRAPPER_RC" ]; then
+    cp -a "$WRAPPER_RC" "$backup_target/bashrc"
+fi
 
 # 오래된 백업 정리
 find "$BACKUP_DIR" -mindepth 1 -maxdepth 1 -type d | sort -r \
@@ -88,6 +112,26 @@ elif [ -f "$CODEX_HOME/config.toml" ]; then
     echo ""
     echo "ⓘ ~/.codex/config.toml 존재 — 건드리지 않음."
 fi
+
+# .bashrc codex 래퍼 설치(append-if-absent). 위 감지 결과(need_wrapper/
+# wrapper_skip_reason)에 따라 한 번만 추가하거나, 보존/안내한다.
+if [ "$need_wrapper" -eq 1 ]; then
+    {
+        echo ""
+        cat "$WRAPPER_REAL"
+    } >> "$WRAPPER_RC"
+    echo ""
+    echo "✓ codex 프록시 래퍼를 ~/.bashrc 에 설치했습니다 (local/codex-proxy-wrapper.sh)."
+    echo "  ↳ 적용하려면 새 셸을 열거나 'source ~/.bashrc' 하세요."
+elif [ "$wrapper_skip_reason" = "present" ]; then
+    echo ""
+    echo "ⓘ ~/.bashrc 에 codex 프록시 래퍼 존재 — 건드리지 않음."
+elif [ "$wrapper_skip_reason" = "placeholder" ]; then
+    echo ""
+    echo "⚠ local/codex-proxy-wrapper.sh 에 placeholder(<PROXY_HOST> 등)가 남아 ~/.bashrc 에 설치하지 않았습니다."
+    echo "  ↳ 실제 프록시/CA 값으로 채운 뒤 다시 sync 하세요."
+fi
+# wrapper_skip_reason="no-real"(=.example만 있고 실제 파일 없음)은 지시대로 조용히 아무것도 하지 않는다.
 
 # 관리 대상 하위 디렉터리 안의 고아 파일 처리 (확인 후 삭제).
 # `|| ans=""`로 stdin의 EOF(비대화형 실행)가 set -e에서 스크립트를 중단시키지 않게 한다.
