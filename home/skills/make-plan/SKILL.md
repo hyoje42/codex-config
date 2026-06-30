@@ -1,6 +1,6 @@
 ---
 name: make-plan
-description: "Create an implementation plan as a markdown file in the workspace's .plans/ directory. Trigger on '/make-plan {description}' or when the user asks to 'create a plan', 'write a plan', 'plan this out', or similar requests to formalize an approach before implementation. Do NOT trigger for casual discussion about plans or when the user just wants verbal advice."
+description: "Create an implementation plan as a markdown file in the workspace's .plans/ directory. Trigger on '$make-plan {description}' or when the user asks to 'create a plan', 'write a plan', 'plan this out', or similar requests to formalize an approach before implementation. Do NOT trigger for casual discussion about plans or when the user just wants verbal advice."
 ---
 
 # Make Plan
@@ -114,6 +114,6 @@ ls .plans/*-{task-name}/ 2>/dev/null
 - **Never blindly trust references.** When files, documents, prior plans, or external material are provided, verify them against the actual code before incorporating. Confirm that file paths exist, functions/classes are real, and descriptions match current state. Do not copy unverified claims into the plan.
 - Always include the Context section with conversation background — problems found, things tried, conclusions reached
 - Never modify existing plan files — always create a new version
-- **If `/make-plan` is called again for the same task within the same session, always create a new versioned file** — never overwrite
+- **If `$make-plan` is called again for the same task within the same session, always create a new versioned file** — never overwrite
 - Create `.plans/` in the workspace root, folder name prefixed with KST date (`YYMMDD-`)
 - Report the file path to the user after writing

@@ -20,13 +20,13 @@ Do not spend time on cosmetic nits unless the user explicitly asks for style fee
 
 Works on **local git refs only**. No remote API, no `gh`, no PR numbers, no URLs. If the change is in a remote PR, check out the branch locally first.
 
-### Slash command: `/review-pr [args]`
+### Skill command: `$review-pr [args]`
 
-- `/review-pr` — current branch vs `main`
-- `/review-pr <branch>` — `<branch>` vs `main`
-- `/review-pr <target> <base>` — `<target>` vs `<base>`
-- `/review-pr --staged` — `git diff --staged`
-- Append `draft` to any of the above to also draft a PR title and body (e.g. `/review-pr <branch> draft`)
+- `$review-pr` — current branch vs `main`
+- `$review-pr <branch>` — `<branch>` vs `main`
+- `$review-pr <target> <base>` — `<target>` vs `<base>`
+- `$review-pr --staged` — `git diff --staged`
+- Append `draft` to any of the above to also draft a PR title and body (e.g. `$review-pr <branch> draft`)
 
 Parse args flexibly. If any piece is ambiguous, ask before proceeding — do not guess.
 

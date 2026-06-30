@@ -7,9 +7,8 @@ When project-specific instructions exist, prefer them, but keep these global ins
 - Respond in Korean unless the user specifies another language.
 - Technical terms such as code identifiers, commands, filenames, and library names may stay in their original form.
 - Before editing a file, briefly explain what you're changing and why.
-- When referring to code or files, use clickable absolute-path markdown links where possible.
+- When referring to code or files, use clickable markdown links with absolute paths in the URL and relative paths in the link text where possible.
 - Propose or apply logically related changes together.
-- Prefer the information the user needs to decide or act next over unnecessarily verbose explanation.
 
 ## Tool Usage
 
@@ -28,10 +27,6 @@ When project-specific instructions exist, prefer them, but keep these global ins
 ## Git Commit
 
 - Never run `git commit` on your own initiative. When asked to commit or to generate a message, **propose** the message first and commit only after the user approves. Ambiguous phrasing like "sync to git" does not mean commit.
-- Always write commit messages in English, regardless of the conversation language.
-- Follow conventional commit format (feat, fix, refactor, docs, test, chore, etc.).
-- Keep the title concise (under 50 characters) and in imperative mood ("add", not "added"). Add a body only when the change needs explanation; mark breaking changes explicitly.
-- Do NOT add AI co-author trailers (e.g., `Co-Authored-By: Claude`, `Co-Authored-By: Codex`) or generator footers (e.g., `🤖 Generated with ...`).
 
 ## Authoring Agent Instruction Files
 

@@ -1,6 +1,6 @@
 ---
 name: load-handoff
-description: "Use this skill when the user wants to resume work from a previous handoff file. Trigger on requests like \"continue from handoff\", \"resume work\", \"load handoff\", \"resume from handoff\", or when the user provides a handoff file path. Use when the user wants to continue previous work without losing context. The user can provide a handoff file path as an argument, either as a relative path or using @ file reference (e.g., /load_handoff .handoffs/YYMMDD-task-name/codex-handoff-xxx.md or /load_handoff @codex-handoff-xxx.md). Do NOT use for general file reading or tasks unrelated to resuming previous work."
+description: "Use this skill when the user wants to resume work from a previous handoff file. Trigger on requests like \"continue from handoff\", \"resume work\", \"load handoff\", \"resume from handoff\", or when the user provides a handoff file path. Use when the user wants to continue previous work without losing context. The user can provide a handoff file path as an argument, either as a relative path or using @ file reference (e.g., $load-handoff .handoffs/YYMMDD-task-name/codex-handoff-xxx.md or $load-handoff @codex-handoff-xxx.md). Do NOT use for general file reading or tasks unrelated to resuming previous work."
 ---
 
 # Resume Work from Handoff
@@ -60,4 +60,4 @@ If additional work remains after resuming, create a new handoff (via the handoff
 
 - **File not found**: report the bad path and suggest `ls -lt .handoffs/` to locate available handoffs.
 - **Invalid format** (missing Task Overview / Current Progress / Next Steps): warn that the file doesn't look like a handoff, summarize what is there, and ask whether to proceed.
-- **No path provided**: show usage (`/load_handoff <path>` or `/load_handoff @file`) and list available handoffs.
+- **No path provided**: show usage (`$load-handoff <path>` or `$load-handoff @file`) and list available handoffs.
