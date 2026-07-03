@@ -1,0 +1,235 @@
+#!/usr/bin/env python3
+"""Merge Codex config.toml layers and print normalized TOML.
+
+Merge order:
+  current ~/.codex/config.toml
+  + repo baseline home/config.toml
+  + optional local/config.override.toml
+
+Tables are merged recursively. Scalars and arrays from later layers replace
+earlier values. Keys only present in the current machine config are preserved.
+"""
+
+from __future__ import annotations
+
+import copy
+import datetime as _dt
+import json
+import math
+import re
+import sys
+import tomllib
+from pathlib import Path
+from typing import Any
+
+
+def fail(message: str) -> None:
+    print(f"codex-merge-config: {message}", file=sys.stderr)
+    raise SystemExit(1)
+
+
+def load_toml(path_text: str | None, label: str, *, required: bool) -> dict[str, Any]:
+    if not path_text:
+        return {}
+
+    path = Path(path_text)
+    if not path.exists():
+        if required:
+            fail(f"{label} 파일을 찾을 수 없습니다: {path}")
+        return {}
+
+    try:
+        with path.open("rb") as f:
+            data = tomllib.load(f)
+    except tomllib.TOMLDecodeError as exc:
+        fail(f"{label} TOML 문법이 올바르지 않습니다: {path}: {exc}")
+    except OSError as exc:
+        fail(f"{label} 파일을 읽을 수 없습니다: {path}: {exc}")
+
+    if not isinstance(data, dict):
+        fail(f"{label} TOML 루트가 테이블이 아닙니다: {path}")
+    return data
+
+
+def deep_merge(target: dict[str, Any], overlay: dict[str, Any]) -> dict[str, Any]:
+    for key, value in overlay.items():
+        existing = target.get(key)
+        if isinstance(existing, dict) and isinstance(value, dict):
+            deep_merge(existing, value)
+        else:
+            target[key] = copy.deepcopy(value)
+    return target
+
+
+_PLAIN_KEY_RE = re.compile(r"^[A-Za-z0-9_-]+$")
+_TABLE_HEADER_RE = re.compile(r"^\s*\[([^\[\]]+)\]\s*(?:#.*)?$")
+
+
+def quote_key(key: str) -> str:
+    if _PLAIN_KEY_RE.match(key):
+        return key
+    return json.dumps(key, ensure_ascii=False)
+
+
+def quote_path(parts: list[str]) -> str:
+    return ".".join(quote_key(part) for part in parts)
+
+
+def parse_table_path(header: str) -> tuple[str, ...]:
+    parts: list[str] = []
+    current = ""
+    in_string = False
+    escape = False
+
+    for char in header.strip():
+        if in_string:
+            current += char
+            if escape:
+                escape = False
+            elif char == "\\":
+                escape = True
+            elif char == '"':
+                in_string = False
+            continue
+
+        if char == '"':
+            in_string = True
+            current += char
+        elif char == ".":
+            parts.append(parse_table_key(current))
+            current = ""
+        else:
+            current += char
+
+    if current:
+        parts.append(parse_table_key(current))
+    return tuple(parts)
+
+
+def parse_table_key(key: str) -> str:
+    key = key.strip()
+    if len(key) >= 2 and key[0] == '"' and key[-1] == '"':
+        return str(json.loads(key))
+    return key
+
+
+def declared_table_paths(*path_texts: str | None) -> set[tuple[str, ...]]:
+    paths: set[tuple[str, ...]] = set()
+    for path_text in path_texts:
+        if not path_text:
+            continue
+        path = Path(path_text)
+        if not path.exists():
+            continue
+        try:
+            text = path.read_text()
+        except OSError as exc:
+            fail(f"TOML 파일을 읽을 수 없습니다: {path}: {exc}")
+        for line in text.splitlines():
+            match = _TABLE_HEADER_RE.match(line)
+            if match:
+                paths.add(parse_table_path(match.group(1)))
+    return paths
+
+
+def format_inline_table(value: dict[str, Any]) -> str:
+    items = []
+    for key, item in value.items():
+        if isinstance(item, dict):
+            items.append(f"{quote_key(key)} = {format_inline_table(item)}")
+        else:
+            items.append(f"{quote_key(key)} = {format_value(item)}")
+    return "{ " + ", ".join(items) + " }"
+
+
+def format_value(value: Any) -> str:
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, str):
+        return json.dumps(value, ensure_ascii=False)
+    if isinstance(value, int) and not isinstance(value, bool):
+        return str(value)
+    if isinstance(value, float):
+        if math.isnan(value):
+            return "nan"
+        if math.isinf(value):
+            return "inf" if value > 0 else "-inf"
+        return repr(value)
+    if isinstance(value, _dt.datetime):
+        return value.isoformat()
+    if isinstance(value, _dt.date):
+        return value.isoformat()
+    if isinstance(value, _dt.time):
+        return value.isoformat()
+    if isinstance(value, list):
+        return "[" + ", ".join(format_value(item) for item in value) + "]"
+    if isinstance(value, dict):
+        return format_inline_table(value)
+    fail(f"지원하지 않는 TOML 값 타입입니다: {type(value).__name__}")
+
+
+def scalar_items(table: dict[str, Any]) -> list[tuple[str, Any]]:
+    return [(key, value) for key, value in table.items() if not isinstance(value, dict)]
+
+
+def table_items(table: dict[str, Any]) -> list[tuple[str, dict[str, Any]]]:
+    return [(key, value) for key, value in table.items() if isinstance(value, dict)]
+
+
+def emit_assignments(lines: list[str], table: dict[str, Any]) -> None:
+    for key, value in scalar_items(table):
+        lines.append(f"{quote_key(key)} = {format_value(value)}")
+
+
+def emit_tables(
+    lines: list[str],
+    table: dict[str, Any],
+    path: list[str],
+    explicit_tables: set[tuple[str, ...]],
+) -> None:
+    for key, value in table_items(table):
+        current_path = [*path, key]
+        if scalar_items(value) or tuple(current_path) in explicit_tables:
+            if lines and lines[-1] != "":
+                lines.append("")
+            lines.append(f"[{quote_path(current_path)}]")
+            if scalar_items(value):
+                emit_assignments(lines, value)
+        emit_tables(lines, value, current_path, explicit_tables)
+
+
+def dump_toml(data: dict[str, Any], explicit_tables: set[tuple[str, ...]]) -> str:
+    lines: list[str] = []
+    emit_assignments(lines, data)
+    emit_tables(lines, data, [], explicit_tables)
+    return "\n".join(lines).rstrip() + "\n"
+
+
+def main(argv: list[str]) -> int:
+    if len(argv) not in (2, 3, 4):
+        fail("사용법: codex-merge-config <base.toml> [override.toml] [current.toml]")
+
+    base_path = argv[1]
+    override_path = argv[2] if len(argv) >= 3 else ""
+    current_path = argv[3] if len(argv) >= 4 else ""
+
+    current = load_toml(current_path, "current", required=False)
+    base = load_toml(base_path, "baseline", required=True)
+    override = load_toml(override_path, "override", required=False)
+    explicit_tables = declared_table_paths(current_path, base_path, override_path)
+
+    merged: dict[str, Any] = copy.deepcopy(current)
+    deep_merge(merged, base)
+    deep_merge(merged, override)
+
+    rendered = dump_toml(merged, explicit_tables)
+    try:
+        tomllib.loads(rendered)
+    except tomllib.TOMLDecodeError as exc:
+        fail(f"merge 결과가 올바른 TOML이 아닙니다: {exc}")
+    print(rendered, end="")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main(sys.argv))

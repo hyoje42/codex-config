@@ -7,6 +7,10 @@ CODEX_SRC="$CODEX_REPO/home"
 CODEX_HOME="$HOME/.codex"
 BACKUP_DIR="$CODEX_REPO/_backup"
 MAX_BACKUPS=5
+MERGE_HELPER="$CODEX_REPO/codex-merge-config"
+CONFIG_BASE="$CODEX_SRC/config.toml"
+CONFIG_OVERRIDE="$CODEX_REPO/local/config.override.toml"
+CONFIG_TARGET="$CODEX_HOME/config.toml"
 
 # 우리가 완전히 관리하는 하위 디렉터리. 이 안의 고아 파일은 목록으로 보여주고
 # 확인을 거쳐 삭제를 제안한다. skills/.system/는 Codex 소유라 sync와
@@ -14,6 +18,16 @@ MAX_BACKUPS=5
 MANAGED_DIRS=("skills")
 
 mkdir -p "$CODEX_HOME" "$BACKUP_DIR"
+
+if [ ! -x "$MERGE_HELPER" ]; then
+    echo "codex-sync-to-home: config merge helper를 실행할 수 없습니다: $MERGE_HELPER" >&2
+    exit 1
+fi
+
+# config.toml은 home/에 baseline이 있지만 단순 rsync하지 않는다. Codex가
+# ~/.codex/config.toml에 project trust 등 동적 값을 계속 추가하기 때문에,
+# sync 시점에 현재 파일 + repo baseline + local override를 merge한다.
+rsync_excludes=(--exclude='/config.toml' --exclude='skills/.system/')
 
 list_orphans() {
     local d="$1"
@@ -29,7 +43,7 @@ list_orphans() {
 }
 
 # 무언가 하기 전에 변경 사항(rsync dry-run)과 고아 파일을 먼저 감지한다
-sync_changes=$(rsync -an --itemize-changes --exclude='skills/.system/' \
+sync_changes=$(rsync -an --itemize-changes "${rsync_excludes[@]}" \
     "$CODEX_SRC/" "$CODEX_HOME/" 2>/dev/null | grep -cE '^[<>ch]' || true)
 orphan_count=0
 for d in "${MANAGED_DIRS[@]}"; do
@@ -37,14 +51,14 @@ for d in "${MANAGED_DIRS[@]}"; do
     orphan_count=$((orphan_count + n))
 done
 
-# config.toml은 머신 전용이다: home/에는 없고 절대 덮어쓰지 않는다.
-# config.toml이 아직 없는 머신(예: 새로 clone한 경우)에서만 repo 템플릿
-# (local/config.toml.example)으로부터 *seed*만 한다. 기존 config.toml은
-# 건드리지 않는다.
-CONFIG_EXAMPLE="$CODEX_REPO/local/config.toml.example"
-need_seed=0
-if [ ! -f "$CODEX_HOME/config.toml" ] && [ -f "$CONFIG_EXAMPLE" ]; then
-    need_seed=1
+# config.toml merge 결과를 미리 계산해 실제 변경 여부를 본다. 현재 파일이
+# 없으면 baseline(+override)만으로 새 파일을 만든다.
+merged_config_tmp="$(mktemp)"
+trap 'rm -f "$merged_config_tmp"' EXIT
+"$MERGE_HELPER" "$CONFIG_BASE" "$CONFIG_OVERRIDE" "$CONFIG_TARGET" > "$merged_config_tmp"
+config_changed=0
+if [ ! -f "$CONFIG_TARGET" ] || ! cmp -s "$merged_config_tmp" "$CONFIG_TARGET"; then
+    config_changed=1
 fi
 
 # .bashrc codex 래퍼(프록시·CA)도 머신 종속이라 home/ sync가 아니라
@@ -67,7 +81,7 @@ else
     need_wrapper=1
 fi
 
-if [ "$sync_changes" -eq 0 ] && [ "$orphan_count" -eq 0 ] && [ "$need_seed" -eq 0 ] && [ "$need_wrapper" -eq 0 ]; then
+if [ "$sync_changes" -eq 0 ] && [ "$orphan_count" -eq 0 ] && [ "$config_changed" -eq 0 ] && [ "$need_wrapper" -eq 0 ]; then
     echo "변경 사항 없음."
     exit 0
 fi
@@ -98,19 +112,19 @@ fi
 find "$BACKUP_DIR" -mindepth 1 -maxdepth 1 -type d | sort -r \
     | tail -n +$((MAX_BACKUPS + 1)) | xargs -r rm -rf
 
-# home/ -> ~/.codex/ sync (추가/갱신만; skills/.system/는 보존)
+# home/ -> ~/.codex/ sync (추가/갱신만; config.toml merge, skills/.system/는 보존)
 echo ""
 echo "home/ → ~/.codex sync 중 ..."
-rsync -a --exclude='skills/.system/' "$CODEX_SRC/" "$CODEX_HOME/"
+rsync -a "${rsync_excludes[@]}" "$CODEX_SRC/" "$CODEX_HOME/"
 
-# config.toml은 최초 실행 때만 seed; 기존 파일은 절대 덮어쓰지 않는다.
-if [ "$need_seed" -eq 1 ]; then
+# config.toml은 현재 머신 파일 위에 repo baseline과 local override를 merge한다.
+if [ "$config_changed" -eq 1 ]; then
     echo ""
-    echo "✓ config.toml seed 완료 (local/config.toml.example → ~/.codex/config.toml, 최초 1회만)"
-    cp "$CONFIG_EXAMPLE" "$CODEX_HOME/config.toml"
-elif [ -f "$CODEX_HOME/config.toml" ]; then
+    echo "✓ config.toml merge 완료 (현재 ~/.codex/config.toml + home/config.toml + local/config.override.toml)"
+    cp "$merged_config_tmp" "$CONFIG_TARGET"
+else
     echo ""
-    echo "ⓘ ~/.codex/config.toml 존재 — 건드리지 않음."
+    echo "ⓘ ~/.codex/config.toml merge 결과 변경 없음."
 fi
 
 # .bashrc codex 래퍼 설치(append-if-absent). 위 감지 결과(need_wrapper/
