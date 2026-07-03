@@ -42,7 +42,7 @@ When revising or building on an existing plan:
 3. Create a new file with the next version number — never modify existing files
 4. Reference the previous version at the top of the new file
 
-If plan files from other agents already exist (e.g., `codex-plan.md`, `cursor-plan.md`), continue the version sequence from where they left off. Read those files first, then create `codex-plan-v{N}.md` as the next version.
+If plan files from other agents already exist (e.g., `claude-plan.md`, `cursor-plan.md`), continue the version sequence from where they left off. Read those files first, then create `codex-plan-v{N}.md` as the next version.
 
 ```bash
 # Check existing files (including files from other agents)
@@ -57,6 +57,8 @@ ls .plans/*-{task-name}/ 2>/dev/null
 ```
 
 ## Plan Template
+
+When using this template, translate headings and prose into the user's explicitly requested language; if no language is specified, use the user's preferred language. Keep file paths, code identifiers, and commands unchanged.
 
 ```markdown
 # {Task Title}
@@ -110,6 +112,7 @@ ls .plans/*-{task-name}/ 2>/dev/null
 ## Rules
 
 - Plans must be concrete and actionable — include exact file paths and specific changes, not vague instructions
+- Write the plan in the user's explicitly requested language; if no language is specified, write it in the user's preferred language.
 - Explore the codebase thoroughly before writing the plan
 - **Never blindly trust references.** When files, documents, prior plans, or external material are provided, verify them against the actual code before incorporating. Confirm that file paths exist, functions/classes are real, and descriptions match current state. Do not copy unverified claims into the plan.
 - Always include the Context section with conversation background — problems found, things tried, conclusions reached

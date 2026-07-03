@@ -23,6 +23,9 @@ shared TeamCreate/TaskCreate board or built-in inter-agent messaging fabric.
 - For code-writing agents, assign disjoint ownership of files/modules.
 - Keep the main Codex agent responsible for orchestration, integration, and the
   final answer.
+- Write team design documents, agent prompts, and generated markdown artifacts
+  in the user's explicitly requested language; if no language is specified,
+  write them in the user's preferred language.
 
 ## Workflow
 

@@ -5,24 +5,47 @@ set -euo pipefail
 CODEX_REPO="$(cd "$(dirname "$0")" && pwd)"
 CODEX_SRC="$CODEX_REPO/home"
 CODEX_HOME="$HOME/.codex"
+MERGE_HELPER="$CODEX_REPO/codex-merge-config"
+CONFIG_BASE="$CODEX_SRC/config.toml"
+CONFIG_OVERRIDE="$CODEX_REPO/local/config.override.toml"
+CONFIG_TARGET="$CODEX_HOME/config.toml"
 
 # 우리가 완전히 관리하는 하위 디렉터리. 고아 파일은 이들에 대해서만 보고한다.
 # skills/.system/는 Codex 소유라 제외한다.
 MANAGED_DIRS=("skills")
 
-# config.toml은 머신 종속이다: ~/.codex/에만 있고(home/에는 없음), 그래서
-# 아래 파일별 diff에는 포함되지 않는다. 대신 sync가 config.toml에 무엇을
-# 할지 — 새 머신이면 seed, 기존 파일이면 그대로 보존 — 알려줘서
-# 이 미리보기가 sync의 실제 동작을 반영하도록 한다.
-print_config_note() {
-    local example="$CODEX_REPO/local/config.toml.example"
-    if [ -f "$CODEX_HOME/config.toml" ]; then
-        echo "ⓘ config.toml: 이미 존재 → sync가 건드리지 않습니다 (직접 편집 대상)."
-    elif [ -f "$example" ]; then
-        echo "ⓘ config.toml: 없음 → sync 시 local/config.toml.example에서 seed됩니다 (최초 1회)."
+if [ ! -x "$MERGE_HELPER" ]; then
+    echo "codex-diff-with-home: config merge helper를 실행할 수 없습니다: $MERGE_HELPER" >&2
+    exit 1
+fi
+
+print_config_note_and_diff() {
+    local merged_tmp
+    merged_tmp="$(mktemp)"
+    "$MERGE_HELPER" "$CONFIG_BASE" "$CONFIG_OVERRIDE" "$CONFIG_TARGET" > "$merged_tmp"
+
+    if [ -f "$CONFIG_OVERRIDE" ]; then
+        echo "ⓘ config.toml: 현재 파일 + home/config.toml + local/config.override.toml merge 결과를 비교합니다."
     else
-        echo "⚠ config.toml 없음 + local/config.toml.example 없음 → seed되지 않습니다."
+        echo "ⓘ config.toml: 현재 파일 + home/config.toml merge 결과를 비교합니다 (local override 없음)."
     fi
+
+    if [ ! -f "$CONFIG_TARGET" ]; then
+        new_files+=("config.toml")
+        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        echo "  config.toml"
+        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        sed 's/^/+/' "$merged_tmp"
+        echo ""
+    elif ! cmp -s "$merged_tmp" "$CONFIG_TARGET"; then
+        changed_files+=("config.toml")
+        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        echo "  config.toml"
+        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        { diff -u "$CONFIG_TARGET" "$merged_tmp" --label "~/.codex/config.toml" --label "merge 결과 config.toml" 2>/dev/null || true; } | tail -n +3
+        echo ""
+    fi
+    rm -f "$merged_tmp"
 }
 
 # .bashrc codex 래퍼도 머신 종속이라 파일별 diff에는 없다. sync가 ~/.bashrc에
@@ -70,13 +93,14 @@ compare_file() {
 echo ""
 echo "repo/home → ~/.codex 비교 중"
 echo ""
-print_config_note
 print_wrapper_note
 echo ""
+print_config_note_and_diff
 
 # home/의 모든 파일을 순회한다 (최상위 + 관리 대상 하위 디렉터리 모두 여기서 처리)
 while IFS= read -r -d '' repo_file; do
     rel_path="${repo_file#$CODEX_SRC/}"
+    [ "$rel_path" = "config.toml" ] && continue
     compare_file "$rel_path"
 done < <(find "$CODEX_SRC" -type f -print0 2>/dev/null)
 
@@ -127,5 +151,5 @@ fi
 
 # 긴 diff 뒤에도 config.toml 처리 방식이 보이도록 짧게 다시 안내한다.
 echo ""
-echo "  ↳ config.toml·codex 래퍼는 위 diff에 없습니다 (머신 종속 — sync 동작은 위 ⓘ 참고)."
+echo "  ↳ config.toml은 merge 결과 기준이며, codex 래퍼는 머신 종속이라 파일 diff에 없습니다."
 echo ""

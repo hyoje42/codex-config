@@ -4,11 +4,12 @@ Codex를 더 편하게 사용하기 위한 커스텀 skill과 전역 지시문(A
 
 ## 구조
 
-- `home/` — `~/.codex/`로 sync되는 영역. 폴더 구조가 `~/.codex/` 레이아웃을 그대로 미러링한다.
+- `home/` — `~/.codex/`로 sync되는 영역. 대부분의 경로는 `~/.codex/` 레이아웃을 그대로 미러링하고, `config.toml`만 merge로 적용한다.
   - `home/AGENTS.md` — Codex 전역 지시문 (`~/.codex/AGENTS.md`로 sync). **Codex가 로드하는 전역 규칙은 이 단일 파일이다**(`~/.codex/rules/`는 지시문으로 로드되지 않음). 이 파일은 sync payload이며, repo meta 문서가 아니다.
+  - `home/config.toml` — 공통 Codex baseline. 단순 복사가 아니라 현재 `~/.codex/config.toml` 위에 merge된다(아래 참고).
   - `home/skills/` — 커스텀 skill 정의 (`SKILL.md` 형식)
-- `local/` — **머신 종속 설정의 템플릿을 두는 곳 (sync 대상 아님).** 루트 `.gitignore`가 `local/*`를 무시하고 `*.example` 템플릿만 추적한다. 실제 머신 값 파일(`config.toml`·`codex-proxy-wrapper.sh` 등)은 커밋되지 않는다.
-  - `local/config.toml.example` — `~/.codex/config.toml`의 커밋용 템플릿. sync가 config.toml이 없는 머신에 한해 이 파일로 seed한다(아래 참고).
+- `local/` — **머신 종속 설정의 템플릿을 두는 곳 (sync 대상 아님).** 루트 `.gitignore`가 `local/*`를 무시하고 `*.example` 템플릿만 추적한다. 실제 머신 값 파일(`config.override.toml`·`codex-proxy-wrapper.sh` 등)은 커밋되지 않는다.
+  - `local/config.override.toml.example` — 머신별 `config.toml` override 템플릿. 실제 값은 `local/config.override.toml`(gitignore됨)에 둔다.
   - `local/codex-proxy-wrapper.sh.example` — 프록시 환경 로그인용 `~/.bashrc` codex 래퍼 템플릿. 실제 값은 `local/codex-proxy-wrapper.sh`(gitignore됨)에 채우고, sync가 `~/.bashrc`에 설치한다(아래 참고).
 - `skill-authoring.md` — skill 작성·이식 가이드
 - `outdated/` — 퇴역한 skill·rule의 기록용 보관소. **sync 대상 아님.**
@@ -17,33 +18,41 @@ Codex를 더 편하게 사용하기 위한 커스텀 skill과 전역 지시문(A
 
 ## 스크립트
 
-- `codex-sync-to-home` — `home/` 내용을 `~/.codex/`로 복사한다. `~/.codex/config.toml`이 없는 머신에서는 `local/config.toml.example`로 한 번 seed한다(이미 있으면 건드리지 않음). 또한 `local/codex-proxy-wrapper.sh`(실제 값)가 있고 `~/.bashrc`에 래퍼가 아직 없으면 한 번 설치한다(아래 참고). **사용자가 명시적으로 지시했을 때만 실행한다.**
-- `codex-diff-with-home` — `home/`과 `~/.codex/`의 차이 확인. config.toml·codex 래퍼는 머신 종속이라 직접 비교하지 않고, sync가 각각에 무엇을 할지(seed/설치/보존)를 안내한다.
+- `codex-sync-to-home` — `home/` 내용을 `~/.codex/`에 반영한다. 대부분은 복사하고, `config.toml`은 현재 `~/.codex/config.toml` + `home/config.toml` + 선택적 `local/config.override.toml`을 merge해서 쓴다. 또한 `local/codex-proxy-wrapper.sh`(실제 값)가 있고 `~/.bashrc`에 래퍼가 아직 없으면 한 번 설치한다(아래 참고). **사용자가 명시적으로 지시했을 때만 실행한다.**
+- `codex-diff-with-home` — `home/`과 `~/.codex/`의 차이 확인. `config.toml`은 실제 sync 때 만들어질 merge 결과와 비교하고, codex 래퍼는 설치/보존 여부를 안내한다.
+- `codex-merge-config` — `config.toml` merge helper. `codex-sync-to-home`/`codex-diff-with-home`에서 호출한다.
 
 ## 작업 흐름
 
-1. 공통 설정은 `home/`(`AGENTS.md`·`skills/`)에서, 머신 종속 값은 `~/.codex/config.toml`·`local/`에서 수정한다.
+1. 공통 설정은 `home/`(`AGENTS.md`·`config.toml`·`skills/`)에서, 머신 종속 값은 `local/config.override.toml`·`~/.codex/config.toml`에서 수정한다.
 2. `./codex-diff-with-home`으로 차이를 확인한다.
 3. 필요할 때 `./codex-sync-to-home`으로 `~/.codex/`에 반영한다.
 4. `git commit`으로 변경 이력을 남긴다(`local/`의 실제 머신 값은 커밋되지 않는다).
 
-## 머신 종속 설정 (config.toml seed)
+## config.toml merge
 
-Codex의 모델·reasoning effort·project trust 같은 값은 **머신마다 달라** git에 올리지 않는다. 이 값들은 `~/.codex/config.toml`에 들어가는데, config.toml은 **sync 대상이 아니다**(거의 전부가 머신 종속 값이라 공통 baseline을 둘 의미가 없다).
+Codex의 `config.toml`은 공통으로 맞추고 싶은 값과 머신마다 다른 값이 섞여 있고, Codex가 project trust 같은 항목을 계속 추가할 수 있다. 그래서 이 repo는 `home/config.toml`을 공통 baseline으로 두되, 파일 전체를 단순 복사하지 않고 sync 시점에 merge한다.
 
-대신 **seed-if-absent** 방식으로 다룬다.
+merge 순서:
 
-**셋업**
+1. 현재 `~/.codex/config.toml` (없으면 빈 TOML)
+2. `home/config.toml` (공통 baseline, 커밋)
+3. `local/config.override.toml` (선택, gitignore됨)
 
-1. 새 머신에 `~/.codex/config.toml`이 없으면, `./codex-sync-to-home`이 `local/config.toml.example`을 한 번 복사해 seed한다.
-2. 이후 `~/.codex/config.toml`을 직접 열어 model·reasoning effort·project trust 등을 채워 넣는다.
+동작:
 
-**동작**
+- 테이블은 재귀적으로 병합한다.
+- 스칼라/배열은 뒤 레이어가 이긴다. 즉 같은 키가 이미 있으면 `home/config.toml` 또는 `local/config.override.toml` 값으로 교체하고, 없으면 추가한다.
+- repo가 모르는 기존 머신별 값(project trust, Codex가 자동으로 추가한 값 등)은 보존한다.
+- merge 결과는 정규화된 TOML로 다시 쓰므로 기존 `~/.codex/config.toml`의 주석/서식은 보존하지 않는다.
 
-- `~/.codex/config.toml`이 **없을 때만** `local/config.toml.example`로 seed한다. **이미 있으면 절대 덮어쓰지 않는다**(직접 편집한 값을 보존).
-- `codex-diff-with-home`은 config.toml을 직접 diff하지 않고, "없음 → seed 예정" / "있음 → 건드리지 않음"을 `ⓘ`로 안내한다(= sync하면 config.toml에 무엇이 일어날지).
+머신별 override가 필요하면:
 
-> 실제 머신 값을 채운 파일은 `~/.codex/config.toml`에 두고 절대 커밋하지 말 것. `local/`에 실수로 실제 `config.toml`을 두더라도 `.gitignore`가 막는다(`.example` 템플릿만 추적됨).
+```bash
+cp local/config.override.toml.example local/config.override.toml
+```
+
+그 뒤 실제 model·reasoning effort·project trust 등을 `local/config.override.toml`에 넣는다. 이 파일은 `.gitignore`로 커밋되지 않는다.
 
 ## 머신 종속 설정 (프록시·CA 로그인 래퍼)
 
@@ -57,6 +66,7 @@ Codex의 모델·reasoning effort·project trust 같은 값은 **머신마다 �
 `home/` 안의 경로가 그대로 `~/.codex/` 아래에 매핑된다.
 
 - `home/AGENTS.md` -> `~/.codex/AGENTS.md`
+- `home/config.toml` -> `~/.codex/config.toml`에 merge
 - `home/skills/` -> `~/.codex/skills/`
 
 `~/.codex/rules/default.rules`는 Codex 승인 규칙 파일이므로 이 저장소가 덮어쓰지 않는다.

@@ -1,0 +1,32 @@
+# ── Codex 머신별 config.toml override 템플릿 ───────────────────────────
+# 사용법: 이 파일을 복사해 아래 경로에 저장한다.
+#
+#   local/config.override.toml   (git-ignored)
+#
+# codex-sync-to-home 실행 시 다음 순서로 TOML을 deep-merge 해서
+# ~/.codex/config.toml 에 쓴다.
+#
+#   현재 ~/.codex/config.toml
+#   + home/config.toml
+#   + local/config.override.toml
+#
+# 테이블은 키별로 병합하고, 스칼라/배열은 뒤 레이어가 이긴다. 즉 같은 키가
+# 이미 있으면 이 파일의 값으로 교체하고, 없으면 추가한다. 이 repo가 모르는
+# 기존 머신별 값(project trust, Codex가 자동으로 추가한 값 등)은 보존된다.
+#
+# TOML scope 주의:
+# - top-level 키는 첫 [table] 헤더 전에 둔다.
+# - table 키는 해당 헤더 아래에 둔다. 예: codex_git_commit은 [features] 아래.
+# - 이미 [features]를 선언한 파일에서 features.codex_git_commit처럼 다시
+#   dotted key로 선언하지 않는다.
+#
+# 예시:
+#
+# model = "gpt-5-codex"
+# model_reasoning_effort = "high"
+#
+# [features]
+# codex_git_commit = true
+#
+# [projects."/absolute/path/to/project"]
+# trusted = true
