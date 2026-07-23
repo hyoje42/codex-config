@@ -5,6 +5,9 @@ set -euo pipefail
 CODEX_REPO="$(cd "$(dirname "$0")" && pwd)"
 CODEX_SRC="$CODEX_REPO/home"
 CODEX_HOME="$HOME/.codex"
+CODEX_SKILLS_SRC="$CODEX_SRC/skills"
+AGENTS_SKILLS_HOME="$HOME/.agents/skills"
+LEGACY_SKILLS_HOME="$CODEX_HOME/skills"
 BACKUP_DIR="$CODEX_REPO/_backup"
 MAX_BACKUPS=5
 MERGE_HELPER="$CODEX_REPO/codex-merge-config"
@@ -12,44 +15,57 @@ CONFIG_BASE="$CODEX_SRC/config.toml"
 CONFIG_OVERRIDE="$CODEX_REPO/local/config.override.toml"
 CONFIG_TARGET="$CODEX_HOME/config.toml"
 
-# 우리가 완전히 관리하는 하위 디렉터리. 이 안의 고아 파일은 목록으로 보여주고
-# 확인을 거쳐 삭제를 제안한다. skills/.system/는 Codex 소유라 sync와
-# 고아 검사에서 모두 제외한다.
-MANAGED_DIRS=("skills")
-
-mkdir -p "$CODEX_HOME" "$BACKUP_DIR"
+mkdir -p "$CODEX_HOME" "$AGENTS_SKILLS_HOME" "$BACKUP_DIR"
 
 if [ ! -x "$MERGE_HELPER" ]; then
     echo "codex-sync-to-home: config merge helper를 실행할 수 없습니다: $MERGE_HELPER" >&2
     exit 1
 fi
 
-# config.toml은 home/에 baseline이 있지만 단순 rsync하지 않는다. Codex가
-# ~/.codex/config.toml에 project trust 등 동적 값을 계속 추가하기 때문에,
+# config.toml과 skills는 home/에 있지만 이 rsync에서 제외한다. config는
+# merge하고, skills는 공식 사용자 경로인 ~/.agents/skills로 별도 sync한다.
+# Codex가 ~/.codex/config.toml에 project trust 등 동적 값을 계속 추가하기 때문에,
 # sync 시점에 현재 파일 + repo baseline + local override를 merge한다.
-rsync_excludes=(--exclude='/config.toml' --exclude='skills/.system/')
+rsync_excludes=(--exclude='/config.toml' --exclude='/skills/')
 
-list_orphans() {
-    local d="$1"
-    local home_d="$CODEX_HOME/$d"
-    local src_d="$CODEX_SRC/$d"
-    # bare return 대신 return 0을 써서 [ -d ] 실패 상태가
-    # `n=$(... | wc -l)`의 pipefail로 전파돼 set -e에서 스크립트를 중단시키지 않게 한다.
-    [ -d "$home_d" ] || return 0
-    while IFS= read -r -d '' f; do
-        local rel="${f#$home_d/}"
-        [ -f "$src_d/$rel" ] || echo "$f"
-    done < <(find "$home_d" -type d -name '.system' -prune -o -type f -print0 2>/dev/null)
+list_skill_orphans() {
+    local src_skill skill_name target_skill f rel
+    for src_skill in "$CODEX_SKILLS_SRC"/*; do
+        [ -d "$src_skill" ] || continue
+        skill_name="$(basename "$src_skill")"
+        target_skill="$AGENTS_SKILLS_HOME/$skill_name"
+        [ -d "$target_skill" ] || continue
+        while IFS= read -r -d '' f; do
+            rel="${f#$target_skill/}"
+            [ -f "$src_skill/$rel" ] || echo "$f"
+        done < <(find "$target_skill" -type f -print0 2>/dev/null)
+    done
+    return 0
+}
+
+list_legacy_skill_dirs() {
+    local src_skill skill_name legacy_skill
+    for src_skill in "$CODEX_SKILLS_SRC"/*; do
+        [ -d "$src_skill" ] || continue
+        skill_name="$(basename "$src_skill")"
+        legacy_skill="$LEGACY_SKILLS_HOME/$skill_name"
+        [ -d "$legacy_skill" ] && echo "$legacy_skill"
+    done
+    return 0
 }
 
 # 무언가 하기 전에 변경 사항(rsync dry-run)과 고아 파일을 먼저 감지한다
 sync_changes=$(rsync -an --itemize-changes "${rsync_excludes[@]}" \
     "$CODEX_SRC/" "$CODEX_HOME/" 2>/dev/null | grep -cE '^[<>ch]' || true)
-orphan_count=0
-for d in "${MANAGED_DIRS[@]}"; do
-    n=$(list_orphans "$d" | wc -l)
-    orphan_count=$((orphan_count + n))
+for src_skill in "$CODEX_SKILLS_SRC"/*; do
+    [ -d "$src_skill" ] || continue
+    skill_name="$(basename "$src_skill")"
+    n=$(rsync -an --itemize-changes "$src_skill/" \
+        "$AGENTS_SKILLS_HOME/$skill_name/" 2>/dev/null | grep -cE '^[<>ch]' || true)
+    sync_changes=$((sync_changes + n))
 done
+orphan_count=$(list_skill_orphans | wc -l)
+legacy_count=$(list_legacy_skill_dirs | wc -l)
 
 # config.toml merge 결과를 미리 계산해 실제 변경 여부를 본다. 현재 파일이
 # 없으면 baseline(+override)만으로 새 파일을 만든다.
@@ -81,7 +97,9 @@ else
     need_wrapper=1
 fi
 
-if [ "$sync_changes" -eq 0 ] && [ "$orphan_count" -eq 0 ] && [ "$config_changed" -eq 0 ] && [ "$need_wrapper" -eq 0 ]; then
+if [ "$sync_changes" -eq 0 ] && [ "$orphan_count" -eq 0 ] &&
+   [ "$legacy_count" -eq 0 ] && [ "$config_changed" -eq 0 ] &&
+   [ "$need_wrapper" -eq 0 ]; then
     echo "변경 사항 없음."
     exit 0
 fi
@@ -90,13 +108,20 @@ fi
 timestamp=$(date +"%Y-%m-%d_%H-%M-%S")
 backup_target="$BACKUP_DIR/$timestamp"
 mkdir -p "$backup_target"
-echo "~/.codex 백업 중 → _backup/$timestamp"
-for d in "${MANAGED_DIRS[@]}"; do
-    src="$CODEX_HOME/$d"
-    [ -d "$src" ] || continue
-    dst="$backup_target/$d"
-    mkdir -p "$(dirname "$dst")"
-    cp -a "$src" "$dst"
+echo "~/.codex 및 관리 중인 ~/.agents skill 백업 중 → _backup/$timestamp"
+for src_skill in "$CODEX_SKILLS_SRC"/*; do
+    [ -d "$src_skill" ] || continue
+    skill_name="$(basename "$src_skill")"
+    target_skill="$AGENTS_SKILLS_HOME/$skill_name"
+    if [ -d "$target_skill" ]; then
+        mkdir -p "$backup_target/agents/skills"
+        cp -a "$target_skill" "$backup_target/agents/skills/$skill_name"
+    fi
+    legacy_skill="$LEGACY_SKILLS_HOME/$skill_name"
+    if [ -d "$legacy_skill" ]; then
+        mkdir -p "$backup_target/legacy-codex-skills"
+        cp -a "$legacy_skill" "$backup_target/legacy-codex-skills/$skill_name"
+    fi
 done
 for f in "$CODEX_SRC"/*; do
     [ -f "$f" ] || continue
@@ -112,10 +137,22 @@ fi
 find "$BACKUP_DIR" -mindepth 1 -maxdepth 1 -type d | sort -r \
     | tail -n +$((MAX_BACKUPS + 1)) | xargs -r rm -rf
 
-# home/ -> ~/.codex/ sync (추가/갱신만; config.toml merge, skills/.system/는 보존)
+# home/ -> ~/.codex/ sync (추가/갱신만; config.toml과 skills는 별도 처리)
 echo ""
 echo "home/ → ~/.codex sync 중 ..."
 rsync -a "${rsync_excludes[@]}" "$CODEX_SRC/" "$CODEX_HOME/"
+
+# home/skills/ -> ~/.agents/skills/ sync. 다른 tool이 둔 skill 디렉터리는
+# 건드리지 않고, 이 repo가 관리하는 이름만 추가/갱신한다.
+echo ""
+echo "home/skills/ → ~/.agents/skills sync 중 ..."
+for src_skill in "$CODEX_SKILLS_SRC"/*; do
+    [ -d "$src_skill" ] || continue
+    skill_name="$(basename "$src_skill")"
+    target_skill="$AGENTS_SKILLS_HOME/$skill_name"
+    mkdir -p "$target_skill"
+    rsync -a "$src_skill/" "$target_skill/"
+done
 
 # config.toml은 현재 머신 파일 위에 repo baseline과 local override를 merge한다.
 if [ "$config_changed" -eq 1 ]; then
@@ -147,22 +184,49 @@ elif [ "$wrapper_skip_reason" = "placeholder" ]; then
 fi
 # wrapper_skip_reason="no-real"(=.example만 있고 실제 파일 없음)은 지시대로 조용히 아무것도 하지 않는다.
 
-# 관리 대상 하위 디렉터리 안의 고아 파일 처리 (확인 후 삭제).
+# 관리 중인 ~/.agents skill 디렉터리 안의 고아 파일 처리 (확인 후 삭제).
+# 다른 이름의 skill 디렉터리는 공유 영역의 사용자 데이터이므로 검사하지 않는다.
 # `|| ans=""`로 stdin의 EOF(비대화형 실행)가 set -e에서 스크립트를 중단시키지 않게 한다.
-for d in "${MANAGED_DIRS[@]}"; do
-    mapfile -t orphans < <(list_orphans "$d")
-    [ ${#orphans[@]} -gt 0 ] || continue
+mapfile -t orphans < <(list_skill_orphans)
+if [ ${#orphans[@]} -gt 0 ]; then
     echo ""
-    echo "~/.codex/$d/의 고아 파일 (대상에는 있지만 repo home/$d/에는 없음):"
-    for o in "${orphans[@]}"; do echo "  ${o#$CODEX_HOME/}"; done
+    echo "관리 중인 ~/.agents/skills/의 고아 파일 (대상에는 있지만 repo에는 없음):"
+    for o in "${orphans[@]}"; do echo "  ${o#$AGENTS_SKILLS_HOME/}"; done
     read -r -p "이 ${#orphans[@]}개 파일을 삭제할까요? [y/N]: " ans || ans=""
     if [[ "$ans" =~ ^[Yy]$ ]]; then
         for o in "${orphans[@]}"; do rm -v "$o"; done
-        find "$CODEX_HOME/$d" -type d -empty -delete 2>/dev/null || true
+        for src_skill in "$CODEX_SKILLS_SRC"/*; do
+            [ -d "$src_skill" ] || continue
+            skill_name="$(basename "$src_skill")"
+            find "$AGENTS_SKILLS_HOME/$skill_name" -type d -empty -delete 2>/dev/null || true
+        done
     else
         echo "건너뜀."
     fi
-done
+fi
+
+# 새 공식 경로와 같은 이름의 legacy skill만 정리 대상으로 제안한다.
+# ~/.codex/skills/.system과 repo가 관리하지 않는 skill은 절대 건드리지 않는다.
+mapfile -t legacy_skill_dirs < <(list_legacy_skill_dirs)
+if [ ${#legacy_skill_dirs[@]} -gt 0 ]; then
+    echo ""
+    echo "이전 ~/.codex/skills 경로에 남은 관리 skill (Codex 공식 loader에서 deprecated):"
+    for legacy_skill in "${legacy_skill_dirs[@]}"; do
+        echo "  ${legacy_skill#$LEGACY_SKILLS_HOME/}"
+    done
+    read -r -p "중복 방지를 위해 이 ${#legacy_skill_dirs[@]}개 디렉터리를 삭제할까요? [y/N]: " ans || ans=""
+    if [[ "$ans" =~ ^[Yy]$ ]]; then
+        for legacy_skill in "${legacy_skill_dirs[@]}"; do
+            case "$legacy_skill" in
+                "$LEGACY_SKILLS_HOME"/*) rm -rf -- "$legacy_skill" ;;
+                *) echo "안전하지 않은 legacy 경로를 건너뜀: $legacy_skill" >&2 ;;
+            esac
+        done
+        echo "✓ 이전 ~/.codex/skills의 관리 skill을 정리했습니다."
+    else
+        echo "건너뜀 — 같은 이름의 skill이 두 경로에서 발견될 수 있습니다."
+    fi
+fi
 
 echo ""
 echo "완료!"
