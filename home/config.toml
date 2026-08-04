@@ -2,3 +2,7 @@ commit_attribution = ""
 
 [features]
 codex_git_commit = false
+
+[tui]
+status_line = ["model-with-reasoning", "current-dir", "context-remaining", "weekly-limit", "used-tokens", "total-input-tokens", "total-output-tokens"]
+status_line_use_colors = true
