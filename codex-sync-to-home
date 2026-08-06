@@ -8,6 +8,7 @@ CODEX_HOME="$HOME/.codex"
 CODEX_SKILLS_SRC="$CODEX_SRC/skills"
 AGENTS_SKILLS_HOME="$HOME/.agents/skills"
 LEGACY_SKILLS_HOME="$CODEX_HOME/skills"
+RETIRED_SKILL_NAMES=(read-review write-review)
 BACKUP_DIR="$CODEX_REPO/_backup"
 MAX_BACKUPS=5
 MERGE_HELPER="$CODEX_REPO/codex-merge-config"
@@ -54,6 +55,28 @@ list_legacy_skill_dirs() {
     return 0
 }
 
+list_retired_skill_dirs() {
+    local skill_name
+    for skill_name in "${RETIRED_SKILL_NAMES[@]}"; do
+        [ -d "$AGENTS_SKILLS_HOME/$skill_name" ] && echo "$AGENTS_SKILLS_HOME/$skill_name"
+        [ -d "$LEGACY_SKILLS_HOME/$skill_name" ] && echo "$LEGACY_SKILLS_HOME/$skill_name"
+    done
+    return 0
+}
+
+is_retired_skill_dir() {
+    local candidate="$1" parent name retired_name
+    parent="$(dirname "$candidate")"
+    name="$(basename "$candidate")"
+    if [ "$parent" != "$AGENTS_SKILLS_HOME" ] && [ "$parent" != "$LEGACY_SKILLS_HOME" ]; then
+        return 1
+    fi
+    for retired_name in "${RETIRED_SKILL_NAMES[@]}"; do
+        [ "$name" = "$retired_name" ] && return 0
+    done
+    return 1
+}
+
 # 무언가 하기 전에 변경 사항(rsync dry-run)과 고아 파일을 먼저 감지한다
 sync_changes=$(rsync -an --itemize-changes "${rsync_excludes[@]}" \
     "$CODEX_SRC/" "$CODEX_HOME/" 2>/dev/null | grep -cE '^[<>ch]' || true)
@@ -66,6 +89,7 @@ for src_skill in "$CODEX_SKILLS_SRC"/*; do
 done
 orphan_count=$(list_skill_orphans | wc -l)
 legacy_count=$(list_legacy_skill_dirs | wc -l)
+retired_count=$(list_retired_skill_dirs | wc -l)
 
 # config.toml merge 결과를 미리 계산해 실제 변경 여부를 본다. 현재 파일이
 # 없으면 baseline(+override)만으로 새 파일을 만든다.
@@ -99,7 +123,7 @@ fi
 
 if [ "$sync_changes" -eq 0 ] && [ "$orphan_count" -eq 0 ] &&
    [ "$legacy_count" -eq 0 ] && [ "$config_changed" -eq 0 ] &&
-   [ "$need_wrapper" -eq 0 ]; then
+   [ "$retired_count" -eq 0 ] && [ "$need_wrapper" -eq 0 ]; then
     echo "변경 사항 없음."
     exit 0
 fi
@@ -123,6 +147,17 @@ for src_skill in "$CODEX_SKILLS_SRC"/*; do
         cp -a "$legacy_skill" "$backup_target/legacy-codex-skills/$skill_name"
     fi
 done
+while IFS= read -r retired_skill; do
+    [ -n "$retired_skill" ] || continue
+    skill_name="$(basename "$retired_skill")"
+    if [ "$(dirname "$retired_skill")" = "$AGENTS_SKILLS_HOME" ]; then
+        mkdir -p "$backup_target/retired-agents-skills"
+        cp -a "$retired_skill" "$backup_target/retired-agents-skills/$skill_name"
+    else
+        mkdir -p "$backup_target/retired-legacy-codex-skills"
+        cp -a "$retired_skill" "$backup_target/retired-legacy-codex-skills/$skill_name"
+    fi
+done < <(list_retired_skill_dirs)
 for f in "$CODEX_SRC"/*; do
     [ -f "$f" ] || continue
     bn=$(basename "$f")
@@ -202,6 +237,33 @@ if [ ${#orphans[@]} -gt 0 ]; then
         done
     else
         echo "건너뜀."
+    fi
+fi
+
+# rename/merge로 퇴역한 정확한 이전 관리 skill은 공유 경로의 다른 이름과
+# 구분해 백업한 뒤, 사용자 확인을 받아 제거한다.
+mapfile -t retired_skill_dirs < <(list_retired_skill_dirs)
+if [ ${#retired_skill_dirs[@]} -gt 0 ]; then
+    echo ""
+    echo "통합·rename 후 남은 이전 관리 skill:"
+    for retired_skill in "${retired_skill_dirs[@]}"; do
+        case "$retired_skill" in
+            "$AGENTS_SKILLS_HOME"/*) echo "  ~/.agents/skills/${retired_skill#$AGENTS_SKILLS_HOME/}" ;;
+            "$LEGACY_SKILLS_HOME"/*) echo "  ~/.codex/skills/${retired_skill#$LEGACY_SKILLS_HOME/}" ;;
+        esac
+    done
+    read -r -p "백업된 이 ${#retired_skill_dirs[@]}개 이전 skill을 삭제할까요? [y/N]: " ans || ans=""
+    if [[ "$ans" =~ ^[Yy]$ ]]; then
+        for retired_skill in "${retired_skill_dirs[@]}"; do
+            if is_retired_skill_dir "$retired_skill"; then
+                rm -rf -- "$retired_skill"
+            else
+                echo "안전하지 않은 이전 skill 경로를 건너뜀: $retired_skill" >&2
+            fi
+        done
+        echo "✓ 이전 관리 skill을 정리했습니다."
+    else
+        echo "건너뜀 — 이전 이름과 새 skill이 함께 로드될 수 있습니다."
     fi
 fi
 
