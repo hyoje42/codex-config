@@ -8,6 +8,7 @@ CODEX_HOME="$HOME/.codex"
 CODEX_SKILLS_SRC="$CODEX_SRC/skills"
 AGENTS_SKILLS_HOME="$HOME/.agents/skills"
 LEGACY_SKILLS_HOME="$CODEX_HOME/skills"
+RETIRED_SKILL_NAMES=(read-review write-review)
 MERGE_HELPER="$CODEX_REPO/codex-merge-config"
 CONFIG_BASE="$CODEX_SRC/config.toml"
 CONFIG_OVERRIDE="$CODEX_REPO/local/config.override.toml"
@@ -68,6 +69,7 @@ changed_files=()
 new_files=()
 deleted_files=()
 legacy_skill_dirs=()
+retired_skill_dirs=()
 
 compare_file() {
     local rel_path="$1"
@@ -131,6 +133,17 @@ for src_skill in "$CODEX_SKILLS_SRC"/*; do
     done < <(find "$target_skill" -type f -print0 2>/dev/null)
 done
 
+# rename/merge로 repo에서 사라진, 이 repo가 과거에 관리하던 정확한 skill
+# 이름만 별도로 감지한다. 공유 경로의 다른 skill 이름은 검사하지 않는다.
+for skill_name in "${RETIRED_SKILL_NAMES[@]}"; do
+    if [ -d "$AGENTS_SKILLS_HOME/$skill_name" ]; then
+        retired_skill_dirs+=("~/.agents/skills/$skill_name/")
+    fi
+    if [ -d "$LEGACY_SKILLS_HOME/$skill_name" ]; then
+        retired_skill_dirs+=("~/.codex/skills/$skill_name/")
+    fi
+done
+
 # 공식 loader가 deprecated로 분류한 이전 경로에 같은 이름의 skill이 남아
 # 있으면 중복 로딩 위험을 별도 표시한다. .system과 다른 사용자 skill은 건드리지 않는다.
 for src_skill in "$CODEX_SKILLS_SRC"/*; do
@@ -146,7 +159,8 @@ echo "  요약"
 echo "==========================================="
 
 if [ ${#changed_files[@]} -eq 0 ] && [ ${#new_files[@]} -eq 0 ] &&
-   [ ${#deleted_files[@]} -eq 0 ] && [ ${#legacy_skill_dirs[@]} -eq 0 ]; then
+   [ ${#deleted_files[@]} -eq 0 ] && [ ${#legacy_skill_dirs[@]} -eq 0 ] &&
+   [ ${#retired_skill_dirs[@]} -eq 0 ]; then
     echo "  ✓ 차이 없음 — ~/.codex와 ~/.agents/skills가 이미 최신입니다."
 else
     if [ ${#changed_files[@]} -gt 0 ]; then
@@ -174,6 +188,14 @@ else
         echo ""
         echo "  이전 ~/.codex/skills 경로에 남은 관리 skill (${#legacy_skill_dirs[@]}):"
         for f in "${legacy_skill_dirs[@]}"; do
+            echo "    !  $f"
+        done
+        echo "    ↳ sync 시 백업 후 삭제 여부를 묻습니다."
+    fi
+    if [ ${#retired_skill_dirs[@]} -gt 0 ]; then
+        echo ""
+        echo "  통합·rename 후 남은 이전 관리 skill (${#retired_skill_dirs[@]}):"
+        for f in "${retired_skill_dirs[@]}"; do
             echo "    !  $f"
         done
         echo "    ↳ sync 시 백업 후 삭제 여부를 묻습니다."
