@@ -14,6 +14,7 @@ Path map: `home/skills/` syncs to `~/.agents/skills/` · the rest of `home/` syn
 - **TOML scope**: when editing `home/config.toml` or `local/config.override.toml.example`, keep top-level keys before the first table header, and keep table-scoped keys under their matching header (for example, `[features]`). Do not rewrite a table-scoped key as a dotted key when that table is declared elsewhere; TOML can treat that as a duplicate declaration or a different nested key.
 - **Preserve approval rules**: `~/.codex/rules/default.rules` is Codex's approval-rules file, so this repo does not overwrite it.
 - **Commit order**: commit in the submodule first → then commit the pointer bump in the parent.
+- **Push to every remote**: this repo is mirrored to multiple remotes (conventionally `origin`/`upstream`); when pushing, push to all of them so the mirrors don't diverge, unless the user says to push only some.
 - **Do not port mechanisms blindly**: Claude uses JSON settings merge; Codex uses TOML config merge plus separate runtime wrapper handling. Convert semantics intentionally when moving rules between tools.
 - **Authoring/porting skills**: for the format and the Claude→Codex conversion rules, see [skill-authoring.md](./skill-authoring.md).
 - **Explicit-invocation-only skills**: add `agents/openai.yaml` with `policy.allow_implicit_invocation: false`. Keep `SKILL.md` frontmatter limited to `name` and `description`; do not rely on description wording to prevent automatic invocation.
