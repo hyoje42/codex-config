@@ -25,7 +25,3 @@ Claude에서 가져온 rule/skill을 Codex로 옮길 때는 도구별 차이를 
 - Claude 전용 도구명(예: `TaskCreate`, `TaskList` 등)은 Codex 대응 기능으로 바꾸거나, 대응이 없으면 Codex sub-agent 방식 등으로 재작성한다.
 - Claude의 `disable-model-invocation: true`는 Codex `SKILL.md`에 복사하지 않고, skill-local `agents/openai.yaml`의 `policy.allow_implicit_invocation: false`로 변환한다.
 - Claude 설정(예: `settings.json` 필드) 중 Codex에 대응이 없는 항목은 옮기지 않는다.
-
-## 동기화 검증
-
-두 도구의 skill이 서로 어긋나지 않는지는 부모 repo 루트의 `check-sync-status`로 기계 비교한다. IDENTICAL 항목은 byte 동일성을, DIFFERS 항목은 도구명·작성자 prefix·홈 경로·호출 문법을 정규화한 뒤 semantic 동일성을 검사한다(rule은 도구별 위치가 달라 — claude `home/rules/` ↔ codex `home/AGENTS.md` — 비교 대상이 아니다). 변환 사유와 rule 정합성은 `docs/skill-sync-status.md`에 기록한다.
