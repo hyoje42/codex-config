@@ -1,7 +1,6 @@
 #!/bin/bash
 #
 # codex-diff-with-home / codex-sync-to-home 회귀 테스트.
-# (skill 경로·공유 디렉터리 보호는 tests/sync-skill-paths.sh가 따로 검증한다.)
 #
 # 임시 HOME과 repo 사본(fixture)에서 dry-run(diff)과 sync를 실행해 다음을 검증한다:
 #   - dry-run은 ~/.codex·~/.agents·~/.bashrc에 아무것도 쓰지 않는다
@@ -100,6 +99,21 @@ cmp -s "$AG/review-pr/SKILL.md" "$FX/home/skills/review-pr/SKILL.md" || fail "~/
 grep -q '^model = "override-model"' "$CX/config.toml"                || fail "config.toml에 override 값이 없습니다."
 grep -q 'trusted = true' "$CX/config.toml"                           || fail "config.toml의 머신별 키(project trust)가 사라졌습니다."
 grep -q 'codex_git_commit = true' "$CX/config.toml"                  || fail "config.toml에 override 테이블 값이 없습니다."
+if ! python3 - "$FX/home/config.toml" "$CX/config.toml" <<'PY'
+import sys
+import tomllib
+
+with open(sys.argv[1], "rb") as source_file:
+    source = tomllib.load(source_file)
+with open(sys.argv[2], "rb") as target_file:
+    target = tomllib.load(target_file)
+
+if source.get("developer_instructions") != target.get("developer_instructions"):
+    raise SystemExit(1)
+PY
+then
+    fail "developer_instructions가 ~/.codex/config.toml에 정확히 전달되지 않았습니다."
+fi
 grep -qF "$WRAPPER_MARKER" "$HOME_DIR/.bashrc"                       || fail "~/.bashrc에 래퍼가 설치되지 않았습니다."
 grep -qF 'proxy.test:8080' "$HOME_DIR/.bashrc"                       || fail "~/.bashrc에 실제 래퍼 값이 없습니다."
 head -1 "$HOME_DIR/.bashrc" | grep -qF '# existing bashrc'           || fail "기존 ~/.bashrc 내용이 보존되지 않았습니다."

@@ -5,7 +5,6 @@ When project-specific instructions exist, prefer them, but keep these global ins
 ## Response Format
 
 - Respond in Korean unless the user specifies another language.
-- Technical terms such as code identifiers, commands, filenames, and library names may stay in their original form.
 - When writing, editing, or adding to documents or saved artifacts, use the language explicitly requested by the user. If none is specified, treat any language required by an invoked skill as user-requested; otherwise, match the existing document's language when appropriate, or use the language the user appears to prefer.
 - Before editing a file, briefly explain what you're changing and why.
 - When referring to code or files, use clickable markdown links with absolute paths in the URL and relative paths in the link text where possible.

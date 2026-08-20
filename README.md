@@ -1,12 +1,12 @@
 # Codex 설정 관리 저장소
 
-Codex를 더 편하게 사용하기 위한 커스텀 skill과 전역 지시문(AGENTS.md)을 만들고 Codex가 읽는 홈 경로에 동기화하는 저장소. 전역 지시문·config는 `~/.codex/`, user skill은 `~/.agents/skills/`에 반영한다.
+Codex를 더 편하게 사용하기 위한 커스텀 skill과 전역 지시문을 만들고 Codex가 읽는 홈 경로에 동기화하는 저장소. 전역 지시문·config는 `~/.codex/`, user skill은 `~/.agents/skills/`에 반영한다.
 
 ## 구조
 
 - `home/` — 추적되는 sync 원본. `skills/`를 제외한 경로는 `~/.codex/` 레이아웃을 미러링하고, `config.toml`은 merge로 적용한다.
-  - `home/AGENTS.md` — Codex 전역 지시문 (`~/.codex/AGENTS.md`로 sync). **Codex가 로드하는 전역 규칙은 이 단일 파일이다**(`~/.codex/rules/`는 지시문으로 로드되지 않음). 이 파일은 sync payload이며, repo meta 문서가 아니다.
-  - `home/config.toml` — 공통 Codex baseline. 단순 복사가 아니라 현재 `~/.codex/config.toml` 위에 merge된다(아래 참고).
+  - `home/AGENTS.md` — Codex의 기본 응답 언어와 공통 작업 규칙 (`~/.codex/AGENTS.md`로 sync). `~/.codex/rules/`는 지시문으로 로드되지 않는다. 이 파일은 sync payload이며, repo meta 문서가 아니다.
+  - `home/config.toml` — 공통 Codex baseline과 한국어 문체용 `developer_instructions`. 단순 복사가 아니라 현재 `~/.codex/config.toml` 위에 merge된다(아래 참고).
   - `home/skills/` — 커스텀 skill 정의. sync 대상은 공식 user skill 경로인 `~/.agents/skills/`다. `$CODEX_HOME/skills`는 [공식 loader](https://github.com/openai/codex/blob/main/codex-rs/core-skills/src/loader.rs)가 하위 호환용 deprecated 경로로만 유지한다.
 - `local/` — **머신 종속 설정의 템플릿을 두는 곳 (sync 대상 아님).** 루트 `.gitignore`가 `local/*`를 무시하고 `*.example` 템플릿만 추적한다. 실제 머신 값 파일(`config.override.toml`·`codex-proxy-wrapper.sh` 등)은 커밋되지 않는다.
   - `local/config.override.toml.example` — 머신별 `config.toml` override 템플릿. 실제 값은 `local/config.override.toml`(gitignore됨)에 둔다.
@@ -20,9 +20,9 @@ Codex를 더 편하게 사용하기 위한 커스텀 skill과 전역 지시문(A
 
 - `codex-sync-to-home` — `home/skills/`는 `~/.agents/skills/`, 나머지는 `~/.codex/`에 반영한다. `config.toml`은 현재 `~/.codex/config.toml` + `home/config.toml` + 선택적 `local/config.override.toml`을 merge해서 쓴다. 또한 `local/codex-proxy-wrapper.sh`(실제 값)가 있고 `~/.bashrc`에 래퍼가 아직 없으면 한 번 설치한다(아래 참고). **사용자가 명시적으로 지시했을 때만 실행한다.**
 - `codex-diff-with-home` — `home/`과 두 실제 대상(`~/.codex/`, `~/.agents/skills/`)의 차이 확인. `config.toml`은 실제 sync 때 만들어질 merge 결과와 비교하고, codex 래퍼는 설치/보존 여부를 안내한다. 실체는 `codex-sync-to-home --dry-run`의 얇은 래퍼라, 무엇이 바뀌는지 계산하는 로직(래퍼 판정·legacy/retired skill 탐지 포함)은 `codex-sync-to-home` 한 곳에만 있다.
-- `codex-merge-config` — `config.toml` merge helper. `codex-sync-to-home`/`codex-diff-with-home`에서 호출한다.
-- `tests/sync-home.sh` — 임시 HOME과 repo 사본에서 diff/sync를 실행해, dry-run이 아무것도 쓰지 않는지·dry-run이 보고한 항목(config merge·래퍼 판정·고아/legacy/retired skill 포함)이 sync에서 그대로 적용되는지·sync 직후 재실행이 멱등한지 검증한다. 실제 `~/.codex`·`~/.agents`·`~/.bashrc`는 건드리지 않는다.
-- `tests/sync-skill-paths.sh` — 임시 HOME에서 sync를 실행해 skill이 `~/.agents/skills/`에만 설치되는지, `.system`과 다른 공유 skill을 보존하는지 검증한다.
+- `codex-merge-config` — `config.toml` merge helper. `codex-sync-to-home`/`codex-diff-with-home`에서 호출하며, 줄바꿈이 있는 문자열은 읽기 쉬운 TOML multiline basic string으로 정규화한다.
+- `tests/config-merge.sh` — current + baseline + override의 보존·우선순위와 multiline 문자열 round-trip을 임시 파일에서 검증한다.
+- `tests/sync-home.sh` — 임시 HOME과 repo 사본에서 diff/sync를 실행해, dry-run이 아무것도 쓰지 않는지·dry-run이 보고한 항목(config merge·`developer_instructions` 전달·래퍼 판정·skill 경로·공유 디렉터리 보호·고아/legacy/retired skill 포함)이 sync에서 그대로 적용되는지·sync 직후 재실행이 멱등한지 검증한다. 실제 `~/.codex`·`~/.agents`·`~/.bashrc`는 건드리지 않는다.
 
 ## 작업 흐름
 
@@ -46,7 +46,7 @@ merge 순서:
 - 테이블은 재귀적으로 병합한다.
 - 스칼라/배열은 뒤 레이어가 이긴다. 즉 같은 키가 이미 있으면 `home/config.toml` 또는 `local/config.override.toml` 값으로 교체하고, 없으면 추가한다.
 - repo가 모르는 기존 머신별 값(project trust, Codex가 자동으로 추가한 값 등)은 보존한다.
-- merge 결과는 정규화된 TOML로 다시 쓰므로 기존 `~/.codex/config.toml`의 주석/서식은 보존하지 않는다.
+- merge 결과는 정규화된 TOML로 다시 쓰므로 기존 `~/.codex/config.toml`의 주석/서식은 보존하지 않는다. 줄바꿈이 있는 문자열은 escaped `\n`이 이어지는 한 줄 대신 multiline TOML로 출력하되, parse한 값은 정확히 유지한다.
 
 머신별 override가 필요하면:
 
@@ -55,6 +55,19 @@ cp local/config.override.toml.example local/config.override.toml
 ```
 
 그 뒤 실제 model·reasoning effort·project trust 등을 `local/config.override.toml`에 넣는다. 이 파일은 `.gitignore`로 커밋되지 않는다.
+
+## developer_instructions와 AGENTS.md의 역할
+
+`home/config.toml`의 `developer_instructions`는 Codex가 실제 `developer` role 메시지에 추가하는 범용 지침이다. Codex의 named output style이나 선택 가능한 style metadata가 아니다. 이 저장소에서는 역할을 다음과 같이 나눈다.
+
+- `home/AGENTS.md`는 기본 응답 언어를 선택하고 파일 편집·도구 사용·커밋과 같은 작업 규칙을 정의한다.
+- `developer_instructions`는 한국어로 작성하기로 선택된 자연어 문장의 문체 품질만 규정한다. 두 위치에 같은 문체 규칙을 반복하지 않는다.
+
+`developer_instructions`는 하나의 scalar string이다. project config나 `local/config.override.toml`에서 같은 키를 정의하면 공통 본문과 합쳐지지 않고 문자열 전체가 교체된다. 머신별로 문체 지침을 의도적으로 끄거나 대체할 때만 override한다.
+
+설정을 바꾼 뒤에는 새 Codex 세션에서 확인하고, 설치된 CLI가 지원하면 `codex debug prompt-input`으로 초기 prompt의 role과 주입 횟수를 점검한다. 이 검증은 초기 prompt 구성만 확인하며, compaction 뒤 지침이 다시 주입된다고 보장하지 않는다.
+
+문체 본문은 한국어 형태론과 대조 예시의 정밀도를 유지하기 위해 이 저장소의 agent instruction 영어 기본 원칙에 대한 예외로 한국어를 사용한다. Claude의 `home/output-styles/fluent-korean.md`가 바뀌면 Codex 전용 범위 설명은 보존하고 본문의 차이만 수동으로 대조하여 반영한다.
 
 ## 머신 종속 설정 (프록시·CA 로그인 래퍼)
 
