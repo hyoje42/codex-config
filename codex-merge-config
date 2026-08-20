@@ -142,11 +142,39 @@ def format_inline_table(value: dict[str, Any]) -> str:
     return "{ " + ", ".join(items) + " }"
 
 
+_MULTILINE_ESCAPE_MAP = {
+    '"': '\\"',
+    "\\": "\\\\",
+    "\b": "\\b",
+    "\t": "\\t",
+    "\f": "\\f",
+    "\r": "\\r",
+}
+
+
+def format_string(value: str) -> str:
+    if "\n" not in value:
+        return json.dumps(value, ensure_ascii=False)
+
+    escaped: list[str] = []
+    for index, char in enumerate(value):
+        if char == "\n":
+            # TOML trims a newline immediately after the opening delimiter.
+            escaped.append("\\n" if index == 0 else "\n")
+        elif char in _MULTILINE_ESCAPE_MAP:
+            escaped.append(_MULTILINE_ESCAPE_MAP[char])
+        elif ord(char) <= 0x1F or ord(char) == 0x7F:
+            escaped.append(f"\\u{ord(char):04X}")
+        else:
+            escaped.append(char)
+    return '"""' + "".join(escaped) + '"""'
+
+
 def format_value(value: Any) -> str:
     if isinstance(value, bool):
         return "true" if value else "false"
     if isinstance(value, str):
-        return json.dumps(value, ensure_ascii=False)
+        return format_string(value)
     if isinstance(value, int) and not isinstance(value, bool):
         return str(value)
     if isinstance(value, float):
