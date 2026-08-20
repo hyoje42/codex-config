@@ -19,8 +19,9 @@ Codex를 더 편하게 사용하기 위한 커스텀 skill과 전역 지시문(A
 ## 스크립트
 
 - `codex-sync-to-home` — `home/skills/`는 `~/.agents/skills/`, 나머지는 `~/.codex/`에 반영한다. `config.toml`은 현재 `~/.codex/config.toml` + `home/config.toml` + 선택적 `local/config.override.toml`을 merge해서 쓴다. 또한 `local/codex-proxy-wrapper.sh`(실제 값)가 있고 `~/.bashrc`에 래퍼가 아직 없으면 한 번 설치한다(아래 참고). **사용자가 명시적으로 지시했을 때만 실행한다.**
-- `codex-diff-with-home` — `home/`과 두 실제 대상(`~/.codex/`, `~/.agents/skills/`)의 차이 확인. `config.toml`은 실제 sync 때 만들어질 merge 결과와 비교하고, codex 래퍼는 설치/보존 여부를 안내한다.
+- `codex-diff-with-home` — `home/`과 두 실제 대상(`~/.codex/`, `~/.agents/skills/`)의 차이 확인. `config.toml`은 실제 sync 때 만들어질 merge 결과와 비교하고, codex 래퍼는 설치/보존 여부를 안내한다. 실체는 `codex-sync-to-home --dry-run`의 얇은 래퍼라, 무엇이 바뀌는지 계산하는 로직(래퍼 판정·legacy/retired skill 탐지 포함)은 `codex-sync-to-home` 한 곳에만 있다.
 - `codex-merge-config` — `config.toml` merge helper. `codex-sync-to-home`/`codex-diff-with-home`에서 호출한다.
+- `tests/sync-home.sh` — 임시 HOME과 repo 사본에서 diff/sync를 실행해, dry-run이 아무것도 쓰지 않는지·dry-run이 보고한 항목(config merge·래퍼 판정·고아/legacy/retired skill 포함)이 sync에서 그대로 적용되는지·sync 직후 재실행이 멱등한지 검증한다. 실제 `~/.codex`·`~/.agents`·`~/.bashrc`는 건드리지 않는다.
 - `tests/sync-skill-paths.sh` — 임시 HOME에서 sync를 실행해 skill이 `~/.agents/skills/`에만 설치되는지, `.system`과 다른 공유 skill을 보존하는지 검증한다.
 
 ## 작업 흐름

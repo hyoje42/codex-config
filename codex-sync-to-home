@@ -1,6 +1,33 @@
 #!/bin/bash
+#
+# repo/home → ~/.codex + ~/.agents/skills sync.
+#
+#   codex-sync-to-home            변경을 홈 대상에 적용한다
+#   codex-sync-to-home --dry-run  적용하지 않고 차이만 보여준다 (= codex-diff-with-home)
+#
+# 구조: plan(무엇이 바뀌는지 계산) → preview(차이 출력) → apply(백업·적용).
+# --dry-run은 plan + preview만 수행한다. 미리보기와 실제 적용이 같은 plan을
+# 공유하므로 "diff가 보여준 것"과 "sync가 하는 것"이 어긋날 수 없다.
 
 set -euo pipefail
+
+DRY_RUN=0
+for arg in "$@"; do
+    case "$arg" in
+        --dry-run|-n) DRY_RUN=1 ;;
+        -h|--help)
+            echo "사용법: $(basename "$0") [--dry-run]"
+            echo "  --dry-run  홈 대상에 쓰지 않고 차이만 출력한다 (codex-diff-with-home과 동일)"
+            exit 0
+            ;;
+        *)
+            echo "$(basename "$0"): 알 수 없는 옵션: $arg" >&2
+            exit 2
+            ;;
+    esac
+done
+# 오류/안내 메시지에 쓰는 명령 이름. dry-run은 codex-diff-with-home으로 호출된다.
+if [ "$DRY_RUN" -eq 1 ]; then PROG="codex-diff-with-home"; else PROG="codex-sync-to-home"; fi
 
 CODEX_REPO="$(cd "$(dirname "$0")" && pwd)"
 CODEX_SRC="$CODEX_REPO/home"
@@ -8,6 +35,8 @@ CODEX_HOME="$HOME/.codex"
 CODEX_SKILLS_SRC="$CODEX_SRC/skills"
 AGENTS_SKILLS_HOME="$HOME/.agents/skills"
 LEGACY_SKILLS_HOME="$CODEX_HOME/skills"
+# rename/merge로 repo에서 사라진, 이 repo가 과거에 관리하던 정확한 skill 이름.
+# 공유 경로의 다른 skill 이름은 검사하지 않는다.
 RETIRED_SKILL_NAMES=(read-review write-review)
 BACKUP_DIR="$CODEX_REPO/_backup"
 MAX_BACKUPS=5
@@ -16,10 +45,16 @@ CONFIG_BASE="$CODEX_SRC/config.toml"
 CONFIG_OVERRIDE="$CODEX_REPO/local/config.override.toml"
 CONFIG_TARGET="$CODEX_HOME/config.toml"
 
-mkdir -p "$CODEX_HOME" "$AGENTS_SKILLS_HOME" "$BACKUP_DIR"
+# .bashrc codex 래퍼(프록시·CA)는 머신 종속이라 home/ sync가 아니라 local/의
+# 실제 래퍼 파일에서 ~/.bashrc로 append-if-absent 한다(방식 A).
+WRAPPER_REAL="$CODEX_REPO/local/codex-proxy-wrapper.sh"
+WRAPPER_RC="$HOME/.bashrc"
+WRAPPER_MARKER="# >>> codex proxy wrapper >>>"
+
+[ "$DRY_RUN" -eq 1 ] || mkdir -p "$CODEX_HOME" "$AGENTS_SKILLS_HOME" "$BACKUP_DIR"
 
 if [ ! -x "$MERGE_HELPER" ]; then
-    echo "codex-sync-to-home: config merge helper를 실행할 수 없습니다: $MERGE_HELPER" >&2
+    echo "$PROG: config merge helper를 실행할 수 없습니다: $MERGE_HELPER" >&2
     exit 1
 fi
 
@@ -29,6 +64,85 @@ fi
 # sync 시점에 현재 파일 + repo baseline + local override를 merge한다.
 rsync_excludes=(--exclude='/config.toml' --exclude='/skills/')
 
+# ─────────────────────────────────────────────────────────────────────────
+# plan: 무엇이 바뀌는지 계산한다. 여기서는 홈 대상에 아무것도 쓰지 않는다.
+# ─────────────────────────────────────────────────────────────────────────
+
+# home/ rel_path → 실제 대상 파일 경로. skills/*는 ~/.agents/skills로 간다.
+target_for() {
+    local rel_path="$1"
+    if [[ "$rel_path" == skills/* ]]; then
+        echo "$AGENTS_SKILLS_HOME/${rel_path#skills/}"
+    else
+        echo "$CODEX_HOME/$rel_path"
+    fi
+}
+# home/ rel_path → 사용자에게 보여줄 대상 경로(~ 표기).
+display_for() {
+    local rel_path="$1"
+    if [[ "$rel_path" == skills/* ]]; then
+        echo "~/.agents/skills/${rel_path#skills/}"
+    else
+        echo "~/.codex/$rel_path"
+    fi
+}
+
+# 래퍼 처리 판정(미리보기 안내와 실제 설치가 같은 판정을 쓴다):
+#   - ~/.bashrc에 마커가 이미 있으면        → 보존(건드리지 않음)      present
+#   - local/codex-proxy-wrapper.sh(실제값)가 없으면 → 아무것도 안 함          no-real
+#   - 실제 파일에 placeholder가 남아 있으면   → 설치 보류                  placeholder
+#   - 그 외                                  → ~/.bashrc에 설치           (need_wrapper=1)
+need_wrapper=0
+wrapper_skip_reason=""
+if grep -qF "$WRAPPER_MARKER" "$WRAPPER_RC" 2>/dev/null; then
+    wrapper_skip_reason="present"
+elif [ ! -f "$WRAPPER_REAL" ]; then
+    wrapper_skip_reason="no-real"
+elif grep -qF '<PROXY_HOST>' "$WRAPPER_REAL"; then
+    wrapper_skip_reason="placeholder"
+else
+    need_wrapper=1
+fi
+
+# config.toml merge 결과를 미리 계산해 실제 변경 여부를 본다. 현재 파일이
+# 없으면 baseline(+override)만으로 새 파일을 만든다. 비교와 적용이 같은 결과물을
+# 쓰므로 dry-run이 보여주는 내용이 곧 sync가 쓰는 내용이다.
+merged_config_tmp="$(mktemp)"
+trap 'rm -f "$merged_config_tmp"' EXIT
+"$MERGE_HELPER" "$CONFIG_BASE" "$CONFIG_OVERRIDE" "$CONFIG_TARGET" > "$merged_config_tmp"
+config_state="same"   # same | new | changed
+if [ ! -f "$CONFIG_TARGET" ]; then
+    config_state="new"
+elif ! cmp -s "$merged_config_tmp" "$CONFIG_TARGET"; then
+    config_state="changed"
+fi
+config_changed=0
+[ "$config_state" = "same" ] || config_changed=1
+
+changed_files=()
+new_files=()
+case "$config_state" in
+    new)     new_files+=("config.toml") ;;
+    changed) changed_files+=("config.toml") ;;
+esac
+
+# home/의 모든 파일을 순회한다 (최상위 + 관리 대상 하위 디렉터리 모두 여기서 처리).
+# config.toml은 위에서 merge 기준으로 따로 판정했다.
+changed_rel_paths=()
+while IFS= read -r -d '' repo_file; do
+    rel_path="${repo_file#$CODEX_SRC/}"
+    [ "$rel_path" = "config.toml" ] && continue
+    home_file="$(target_for "$rel_path")"
+    if [ ! -f "$home_file" ]; then
+        new_files+=("$(display_for "$rel_path")")
+    elif ! diff -q "$repo_file" "$home_file" > /dev/null 2>&1; then
+        changed_files+=("$(display_for "$rel_path")")
+        changed_rel_paths+=("$rel_path")
+    fi
+done < <(find "$CODEX_SRC" -type f -print0 2>/dev/null)
+
+# ~/.agents/skills는 여러 도구가 공유할 수 있으므로, 이 repo에 같은 이름으로
+# 존재하는 skill 디렉터리 내부만 고아 파일을 검사한다.
 list_skill_orphans() {
     local src_skill skill_name target_skill f rel
     for src_skill in "$CODEX_SKILLS_SRC"/*; do
@@ -44,6 +158,8 @@ list_skill_orphans() {
     return 0
 }
 
+# 공식 loader가 deprecated로 분류한 이전 경로(~/.codex/skills)에 같은 이름의
+# skill이 남아 있으면 중복 로딩 위험이 있다. .system과 다른 사용자 skill은 건드리지 않는다.
 list_legacy_skill_dirs() {
     local src_skill skill_name legacy_skill
     for src_skill in "$CODEX_SKILLS_SRC"/*; do
@@ -55,6 +171,7 @@ list_legacy_skill_dirs() {
     return 0
 }
 
+# rename/merge로 퇴역한 정확한 이전 관리 skill만 감지한다(공유 경로와 legacy 경로 모두).
 list_retired_skill_dirs() {
     local skill_name
     for skill_name in "${RETIRED_SKILL_NAMES[@]}"; do
@@ -77,7 +194,144 @@ is_retired_skill_dir() {
     return 1
 }
 
-# 무언가 하기 전에 변경 사항(rsync dry-run)과 고아 파일을 먼저 감지한다
+mapfile -t orphan_files < <(list_skill_orphans)
+mapfile -t legacy_skill_dirs < <(list_legacy_skill_dirs)
+mapfile -t retired_skill_dirs < <(list_retired_skill_dirs)
+orphan_count=${#orphan_files[@]}
+legacy_count=${#legacy_skill_dirs[@]}
+retired_count=${#retired_skill_dirs[@]}
+
+# ─────────────────────────────────────────────────────────────────────────
+# preview (dry-run): 차이를 출력하고 끝낸다. 홈 대상에는 아무것도 쓰지 않는다.
+# ─────────────────────────────────────────────────────────────────────────
+
+# 래퍼는 머신 종속이라 파일별 diff에는 없다. sync가 ~/.bashrc에 무엇을 할지
+# (설치/보존/아무것도 안 함)를 plan의 판정 그대로 안내한다.
+print_wrapper_note() {
+    if [ "$need_wrapper" -eq 1 ]; then
+        echo "ⓘ codex 래퍼: ~/.bashrc에 없음 → sync 시 local/codex-proxy-wrapper.sh에서 ~/.bashrc에 설치됩니다."
+        return
+    fi
+    case "$wrapper_skip_reason" in
+        present)     echo "ⓘ codex 래퍼: ~/.bashrc에 이미 있음 → sync가 건드리지 않습니다." ;;
+        no-real)     echo "ⓘ codex 래퍼: local/codex-proxy-wrapper.sh 없음 → sync가 아무것도 하지 않습니다 (.example만으론 설치 안 함)." ;;
+        placeholder) echo "⚠ codex 래퍼: local/codex-proxy-wrapper.sh에 placeholder 남음 → 실제 값으로 채우면 sync가 ~/.bashrc에 설치합니다." ;;
+    esac
+}
+
+print_config_note_and_diff() {
+    if [ -f "$CONFIG_OVERRIDE" ]; then
+        echo "ⓘ config.toml: 현재 파일 + home/config.toml + local/config.override.toml merge 결과를 비교합니다."
+    else
+        echo "ⓘ config.toml: 현재 파일 + home/config.toml merge 결과를 비교합니다 (local override 없음)."
+    fi
+    case "$config_state" in
+        new)
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            echo "  config.toml"
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            sed 's/^/+/' "$merged_config_tmp"
+            echo ""
+            ;;
+        changed)
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            echo "  config.toml"
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            { diff -u "$CONFIG_TARGET" "$merged_config_tmp" --label "~/.codex/config.toml" --label "merge 결과 config.toml" 2>/dev/null || true; } | tail -n +3
+            echo ""
+            ;;
+    esac
+}
+
+preview() {
+    echo ""
+    echo "repo/home → ~/.codex + ~/.agents/skills 비교 중"
+    echo ""
+    print_wrapper_note
+    echo ""
+    print_config_note_and_diff
+
+    local rel_path display_path
+    for rel_path in "${changed_rel_paths[@]}"; do
+        display_path="$(display_for "$rel_path")"
+        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        echo "  $display_path"
+        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        # `|| true`로 diff의 exit 1(차이 있음)이 set -e/pipefail에서 스크립트를 중단시키지 않게 한다
+        { diff -u "$(target_for "$rel_path")" "$CODEX_SRC/$rel_path" --label "$display_path" --label "repo/home/$rel_path" 2>/dev/null || true; } | tail -n +3
+        echo ""
+    done
+
+    echo "==========================================="
+    echo "  요약"
+    echo "==========================================="
+
+    if [ ${#changed_files[@]} -eq 0 ] && [ ${#new_files[@]} -eq 0 ] &&
+       [ "$orphan_count" -eq 0 ] && [ "$legacy_count" -eq 0 ] &&
+       [ "$retired_count" -eq 0 ]; then
+        echo "  ✓ 차이 없음 — ~/.codex와 ~/.agents/skills가 이미 최신입니다."
+    else
+        local f
+        if [ ${#changed_files[@]} -gt 0 ]; then
+            echo ""
+            echo "  변경됨 (${#changed_files[@]}):"
+            for f in "${changed_files[@]}"; do
+                echo "    M  $f"
+            done
+        fi
+        if [ ${#new_files[@]} -gt 0 ]; then
+            echo ""
+            echo "  repo에 새로 추가 (${#new_files[@]}):"
+            for f in "${new_files[@]}"; do
+                echo "    +  $f"
+            done
+        fi
+        if [ "$orphan_count" -gt 0 ]; then
+            echo ""
+            echo "  관리 중인 ~/.agents skill에만 있음 ($orphan_count):"
+            for f in "${orphan_files[@]}"; do
+                echo "    -  ~/.agents/skills/${f#$AGENTS_SKILLS_HOME/}"
+            done
+        fi
+        if [ "$legacy_count" -gt 0 ]; then
+            echo ""
+            echo "  이전 ~/.codex/skills 경로에 남은 관리 skill ($legacy_count):"
+            for f in "${legacy_skill_dirs[@]}"; do
+                echo "    !  ~/.codex/skills/${f#$LEGACY_SKILLS_HOME/}/"
+            done
+            echo "    ↳ sync 시 백업 후 삭제 여부를 묻습니다."
+        fi
+        if [ "$retired_count" -gt 0 ]; then
+            echo ""
+            echo "  통합·rename 후 남은 이전 관리 skill ($retired_count):"
+            for f in "${retired_skill_dirs[@]}"; do
+                case "$f" in
+                    "$AGENTS_SKILLS_HOME"/*) echo "    !  ~/.agents/skills/${f#$AGENTS_SKILLS_HOME/}/" ;;
+                    "$LEGACY_SKILLS_HOME"/*) echo "    !  ~/.codex/skills/${f#$LEGACY_SKILLS_HOME/}/" ;;
+                esac
+            done
+            echo "    ↳ sync 시 백업 후 삭제 여부를 묻습니다."
+        fi
+    fi
+
+    # 긴 diff 뒤에도 config.toml 처리 방식이 보이도록 짧게 다시 안내한다.
+    echo ""
+    echo "  ↳ config.toml은 ~/.codex merge 결과, skill은 ~/.agents/skills 기준입니다."
+    echo "     codex 래퍼는 머신 종속이라 파일 diff에 없습니다."
+    echo ""
+}
+
+if [ "$DRY_RUN" -eq 1 ]; then
+    preview
+    exit 0
+fi
+
+# ─────────────────────────────────────────────────────────────────────────
+# apply: 백업 → home/ sync → skills sync → config merge → 래퍼 → 정리(승인)
+# ─────────────────────────────────────────────────────────────────────────
+
+# 실제 적용 여부는 rsync dry-run 기준으로 판단한다(내용뿐 아니라 권한·시각 등
+# rsync가 갱신할 모든 항목 포함).
 sync_changes=$(rsync -an --itemize-changes "${rsync_excludes[@]}" \
     "$CODEX_SRC/" "$CODEX_HOME/" 2>/dev/null | grep -cE '^[<>ch]' || true)
 for src_skill in "$CODEX_SKILLS_SRC"/*; do
@@ -87,39 +341,6 @@ for src_skill in "$CODEX_SKILLS_SRC"/*; do
         "$AGENTS_SKILLS_HOME/$skill_name/" 2>/dev/null | grep -cE '^[<>ch]' || true)
     sync_changes=$((sync_changes + n))
 done
-orphan_count=$(list_skill_orphans | wc -l)
-legacy_count=$(list_legacy_skill_dirs | wc -l)
-retired_count=$(list_retired_skill_dirs | wc -l)
-
-# config.toml merge 결과를 미리 계산해 실제 변경 여부를 본다. 현재 파일이
-# 없으면 baseline(+override)만으로 새 파일을 만든다.
-merged_config_tmp="$(mktemp)"
-trap 'rm -f "$merged_config_tmp"' EXIT
-"$MERGE_HELPER" "$CONFIG_BASE" "$CONFIG_OVERRIDE" "$CONFIG_TARGET" > "$merged_config_tmp"
-config_changed=0
-if [ ! -f "$CONFIG_TARGET" ] || ! cmp -s "$merged_config_tmp" "$CONFIG_TARGET"; then
-    config_changed=1
-fi
-
-# .bashrc codex 래퍼(프록시·CA)도 머신 종속이라 home/ sync가 아니라
-# local/의 실제 래퍼 파일에서 ~/.bashrc로 append-if-absent 한다(방식 A).
-#   - ~/.bashrc에 마커가 이미 있으면        → 보존(건드리지 않음)
-#   - local/codex-proxy-wrapper.sh(실제값)가 없으면 → 아무것도 안 함(.example만으론 설치 안 함)
-#   - 실제 파일에 placeholder가 남아 있으면   → 설치 보류(깨진 값이 ~/.bashrc로 새는 것 방지)
-WRAPPER_REAL="$CODEX_REPO/local/codex-proxy-wrapper.sh"
-WRAPPER_RC="$HOME/.bashrc"
-WRAPPER_MARKER="# >>> codex proxy wrapper >>>"
-need_wrapper=0
-wrapper_skip_reason=""
-if grep -qF "$WRAPPER_MARKER" "$WRAPPER_RC" 2>/dev/null; then
-    wrapper_skip_reason="present"
-elif [ ! -f "$WRAPPER_REAL" ]; then
-    wrapper_skip_reason="no-real"
-elif grep -qF '<PROXY_HOST>' "$WRAPPER_REAL"; then
-    wrapper_skip_reason="placeholder"
-else
-    need_wrapper=1
-fi
 
 if [ "$sync_changes" -eq 0 ] && [ "$orphan_count" -eq 0 ] &&
    [ "$legacy_count" -eq 0 ] && [ "$config_changed" -eq 0 ] &&
@@ -147,8 +368,7 @@ for src_skill in "$CODEX_SKILLS_SRC"/*; do
         cp -a "$legacy_skill" "$backup_target/legacy-codex-skills/$skill_name"
     fi
 done
-while IFS= read -r retired_skill; do
-    [ -n "$retired_skill" ] || continue
+for retired_skill in "${retired_skill_dirs[@]}"; do
     skill_name="$(basename "$retired_skill")"
     if [ "$(dirname "$retired_skill")" = "$AGENTS_SKILLS_HOME" ]; then
         mkdir -p "$backup_target/retired-agents-skills"
@@ -157,7 +377,7 @@ while IFS= read -r retired_skill; do
         mkdir -p "$backup_target/retired-legacy-codex-skills"
         cp -a "$retired_skill" "$backup_target/retired-legacy-codex-skills/$skill_name"
     fi
-done < <(list_retired_skill_dirs)
+done
 for f in "$CODEX_SRC"/*; do
     [ -f "$f" ] || continue
     bn=$(basename "$f")
@@ -199,7 +419,7 @@ else
     echo "ⓘ ~/.codex/config.toml merge 결과 변경 없음."
 fi
 
-# .bashrc codex 래퍼 설치(append-if-absent). 위 감지 결과(need_wrapper/
+# .bashrc codex 래퍼 설치(append-if-absent). plan의 판정(need_wrapper/
 # wrapper_skip_reason)에 따라 한 번만 추가하거나, 보존/안내한다.
 if [ "$need_wrapper" -eq 1 ]; then
     {
@@ -222,14 +442,13 @@ fi
 # 관리 중인 ~/.agents skill 디렉터리 안의 고아 파일 처리 (확인 후 삭제).
 # 다른 이름의 skill 디렉터리는 공유 영역의 사용자 데이터이므로 검사하지 않는다.
 # `|| ans=""`로 stdin의 EOF(비대화형 실행)가 set -e에서 스크립트를 중단시키지 않게 한다.
-mapfile -t orphans < <(list_skill_orphans)
-if [ ${#orphans[@]} -gt 0 ]; then
+if [ "$orphan_count" -gt 0 ]; then
     echo ""
     echo "관리 중인 ~/.agents/skills/의 고아 파일 (대상에는 있지만 repo에는 없음):"
-    for o in "${orphans[@]}"; do echo "  ${o#$AGENTS_SKILLS_HOME/}"; done
-    read -r -p "이 ${#orphans[@]}개 파일을 삭제할까요? [y/N]: " ans || ans=""
+    for o in "${orphan_files[@]}"; do echo "  ${o#$AGENTS_SKILLS_HOME/}"; done
+    read -r -p "이 $orphan_count개 파일을 삭제할까요? [y/N]: " ans || ans=""
     if [[ "$ans" =~ ^[Yy]$ ]]; then
-        for o in "${orphans[@]}"; do rm -v "$o"; done
+        for o in "${orphan_files[@]}"; do rm -v "$o"; done
         for src_skill in "$CODEX_SKILLS_SRC"/*; do
             [ -d "$src_skill" ] || continue
             skill_name="$(basename "$src_skill")"
@@ -242,8 +461,7 @@ fi
 
 # rename/merge로 퇴역한 정확한 이전 관리 skill은 공유 경로의 다른 이름과
 # 구분해 백업한 뒤, 사용자 확인을 받아 제거한다.
-mapfile -t retired_skill_dirs < <(list_retired_skill_dirs)
-if [ ${#retired_skill_dirs[@]} -gt 0 ]; then
+if [ "$retired_count" -gt 0 ]; then
     echo ""
     echo "통합·rename 후 남은 이전 관리 skill:"
     for retired_skill in "${retired_skill_dirs[@]}"; do
@@ -252,7 +470,7 @@ if [ ${#retired_skill_dirs[@]} -gt 0 ]; then
             "$LEGACY_SKILLS_HOME"/*) echo "  ~/.codex/skills/${retired_skill#$LEGACY_SKILLS_HOME/}" ;;
         esac
     done
-    read -r -p "백업된 이 ${#retired_skill_dirs[@]}개 이전 skill을 삭제할까요? [y/N]: " ans || ans=""
+    read -r -p "백업된 이 $retired_count개 이전 skill을 삭제할까요? [y/N]: " ans || ans=""
     if [[ "$ans" =~ ^[Yy]$ ]]; then
         for retired_skill in "${retired_skill_dirs[@]}"; do
             if is_retired_skill_dir "$retired_skill"; then
@@ -269,14 +487,13 @@ fi
 
 # 새 공식 경로와 같은 이름의 legacy skill만 정리 대상으로 제안한다.
 # ~/.codex/skills/.system과 repo가 관리하지 않는 skill은 절대 건드리지 않는다.
-mapfile -t legacy_skill_dirs < <(list_legacy_skill_dirs)
-if [ ${#legacy_skill_dirs[@]} -gt 0 ]; then
+if [ "$legacy_count" -gt 0 ]; then
     echo ""
     echo "이전 ~/.codex/skills 경로에 남은 관리 skill (Codex 공식 loader에서 deprecated):"
     for legacy_skill in "${legacy_skill_dirs[@]}"; do
         echo "  ${legacy_skill#$LEGACY_SKILLS_HOME/}"
     done
-    read -r -p "중복 방지를 위해 이 ${#legacy_skill_dirs[@]}개 디렉터리를 삭제할까요? [y/N]: " ans || ans=""
+    read -r -p "중복 방지를 위해 이 $legacy_count개 디렉터리를 삭제할까요? [y/N]: " ans || ans=""
     if [[ "$ans" =~ ^[Yy]$ ]]; then
         for legacy_skill in "${legacy_skill_dirs[@]}"; do
             case "$legacy_skill" in
