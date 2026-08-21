@@ -57,5 +57,5 @@ commit_attribution = ""
 codex_git_commit = false
 
 [tui]
-status_line = ["current-dir", "model-with-reasoning", "context-used", "used-tokens", "total-output-tokens", "five-hour-limit", "weekly-limit"]
+status_line = ["current-dir", "model-with-reasoning", "context-used", "used-tokens", "total-output-tokens", "estimated-thread-cost", "five-hour-limit", "weekly-limit"]
 status_line_use_colors = true
