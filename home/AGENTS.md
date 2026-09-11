@@ -26,7 +26,7 @@ When project-specific instructions exist, prefer them, but keep these global ins
 
 ## Git Commit
 
-- Never run `git commit` on your own initiative. When asked to commit or to generate a message, **propose** the message first and commit only after the user approves. Ambiguous phrasing like "sync to git" does not mean commit.
+- Never run `git commit` on your own initiative. When asked to commit or to generate a message, **propose** the message first and commit only after the user approves. Ambiguous phrasing like "sync to git" does not mean commit. An approval covers only the proposal it answers; after further edits, propose again even if the user earlier said to commit and push.
 
 ## Authoring Agent Instruction Files
 
