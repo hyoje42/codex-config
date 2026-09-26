@@ -6,14 +6,11 @@ When project-specific instructions exist, prefer them, but keep these global ins
 
 - Respond in Korean unless the user specifies another language.
 - When writing, editing, or adding to documents or saved artifacts, use the language explicitly requested by the user. If none is specified, treat any language required by an invoked skill as user-requested; otherwise, match the existing document's language when appropriate, or use the language the user appears to prefer.
-- Before editing a file, briefly explain what you're changing and why.
-- When referring to code or files, use clickable markdown links with absolute paths in the URL and relative paths in the link text where possible.
 - Propose or apply logically related changes together.
 
 ## Tool Usage
 
 - For file-related commands, try workspace-root-relative paths first.
-- Prefer `rg` or `rg --files` for searching.
 - Don't read or search files that look sensitive (`.env`, private keys, credentials, tokens, kube/aws/docker config, etc.) unless they're needed.
 - Don't run destructive changes the user didn't explicitly request (`rm`, force checkout/reset, etc.).
 - Existing work may be mixed in, so don't revert changes you didn't make.
@@ -26,7 +23,7 @@ When project-specific instructions exist, prefer them, but keep these global ins
 
 ## Git Commit
 
-- Never run `git commit` on your own initiative. When asked to commit or to generate a message, **propose** the message first and commit only after the user approves. Ambiguous phrasing like "sync to git" does not mean commit. An approval covers only the proposal it answers; after further edits, propose again even if the user earlier said to commit and push.
+- Never run `git commit` on your own initiative. When asked to commit or to generate a message, **propose** the message first and commit only after the user approves. Ambiguous phrasing like "sync to git" does not mean commit. An approval covers only the proposal it answers, because later edits change what the commit would contain; after further edits, propose again even if the user earlier said to commit and push.
 
 ## Authoring Agent Instruction Files
 
