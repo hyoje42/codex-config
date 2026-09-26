@@ -7,7 +7,7 @@ Codex를 더 편하게 사용하기 위한 커스텀 skill과 전역 지시문�
 - `home/` — 추적되는 sync 원본. `skills/`를 제외한 경로는 `~/.codex/` 레이아웃을 미러링하고, `config.toml`은 merge로 적용한다.
   - `home/AGENTS.md` — Codex의 기본 응답 언어와 공통 작업 규칙 (`~/.codex/AGENTS.md`로 sync). `~/.codex/rules/`는 지시문으로 로드되지 않는다. 이 파일은 sync payload이며, repo meta 문서가 아니다.
   - `home/config.toml` — 공통 Codex baseline과 한국어 문체용 `developer_instructions`. 단순 복사가 아니라 현재 `~/.codex/config.toml` 위에 merge된다(아래 참고).
-  - `home/skills/` — 커스텀 skill 정의. sync 대상은 공식 user skill 경로인 `~/.agents/skills/`다. `$CODEX_HOME/skills`는 [공식 loader](https://github.com/openai/codex/blob/main/codex-rs/core-skills/src/loader.rs)가 하위 호환용 deprecated 경로로만 유지한다.
+  - `home/skills/` — 커스텀 skill 정의. sync 대상은 공식 user skill 경로인 `~/.agents/skills/`다. `$CODEX_HOME/skills`는 [공식 loader](https://github.com/openai/codex/blob/main/codex-rs/ext/skills/src/host_roots.rs)가 하위 호환용 deprecated 경로로만 유지한다.
 - `local/` — **머신 종속 설정의 템플릿을 두는 곳 (sync 대상 아님).** 루트 `.gitignore`가 `local/*`를 무시하고 `*.example` 템플릿만 추적한다. 실제 머신 값 파일(`config.override.toml`·`codex-proxy-wrapper.sh` 등)은 커밋되지 않는다.
   - `local/config.override.toml.example` — 머신별 `config.toml` override 템플릿. 실제 값은 `local/config.override.toml`(gitignore됨)에 둔다.
   - `local/codex-proxy-wrapper.sh.example` — 프록시 환경 로그인용 `~/.bashrc` codex 래퍼 템플릿. 실제 값은 `local/codex-proxy-wrapper.sh`(gitignore됨)에 채우고, sync가 `~/.bashrc`에 설치한다(아래 참고).

@@ -19,17 +19,17 @@
 #
 # TOML scope 주의:
 # - top-level 키는 첫 [table] 헤더 전에 둔다.
-# - table 키는 해당 헤더 아래에 둔다. 예: codex_git_commit은 [features] 아래.
-# - 이미 [features]를 선언한 파일에서 features.codex_git_commit처럼 다시
+# - table 키는 해당 헤더 아래에 둔다. 예: status_line_use_colors는 [tui] 아래.
+# - 이미 [tui]를 선언한 파일에서 tui.status_line_use_colors처럼 다시
 #   dotted key로 선언하지 않는다.
 #
 # 예시:
 #
-# model = "gpt-5-codex"
+# model = "gpt-6-sol"
 # model_reasoning_effort = "high"
 #
-# [features]
-# codex_git_commit = true
+# [tui]
+# status_line_use_colors = false
 #
 # [projects."/absolute/path/to/project"]
-# trusted = true
+# trust_level = "trusted"
