@@ -74,8 +74,8 @@ cp -a "$FX/home/skills/review-pr/." "$AG/review-pr/"
 echo "stale line" >> "$AG/review-pr/SKILL.md"                        # 변경
 echo orphan > "$AG/review-pr/orphan.md"                              # 관리 skill 안의 고아
 cp "$FX/home/AGENTS.md" "$CX/AGENTS.md"; echo "stale line" >> "$CX/AGENTS.md"   # 변경
-printf 'model = "old-model"\n\n[projects."/work/x"]\ntrusted = true\n' > "$CX/config.toml"   # 머신별 키 포함
-printf 'model = "override-model"\n\n[features]\ncodex_git_commit = true\n' > "$FX/local/config.override.toml"
+printf 'model = "old-model"\n\n[projects."/work/x"]\ntrust_level = "trusted"\n' > "$CX/config.toml"   # 머신별 키 포함
+printf 'model = "override-model"\n\n[tui]\nstatus_line_use_colors = false\n' > "$FX/local/config.override.toml"
 make_real_wrapper
 echo "# existing bashrc" > "$HOME_DIR/.bashrc"
 age_home
@@ -97,8 +97,8 @@ cmp -s "$AG/review-pr/SKILL.md" "$FX/home/skills/review-pr/SKILL.md" || fail "~/
 [ -f "$AG/handoff/SKILL.md" ]                                        || fail "신규 skill이 설치되지 않았습니다."
 [ ! -e "$CX/skills/handoff" ]                                        || fail "skill이 deprecated ~/.codex/skills에 설치됐습니다."
 grep -q '^model = "override-model"' "$CX/config.toml"                || fail "config.toml에 override 값이 없습니다."
-grep -q 'trusted = true' "$CX/config.toml"                           || fail "config.toml의 머신별 키(project trust)가 사라졌습니다."
-grep -q 'codex_git_commit = true' "$CX/config.toml"                  || fail "config.toml에 override 테이블 값이 없습니다."
+grep -q 'trust_level = "trusted"' "$CX/config.toml"                  || fail "config.toml의 머신별 키(project trust)가 사라졌습니다."
+grep -q 'status_line_use_colors = false' "$CX/config.toml"           || fail "config.toml에 override 테이블 값이 없습니다."
 if ! python3 - "$FX/home/config.toml" "$CX/config.toml" <<'PY'
 import sys
 import tomllib

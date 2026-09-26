@@ -25,7 +25,7 @@ developer_instructions = "현재 머신 문체"
 machine_only = "보존할 값"
 
 [projects."/work/example"]
-trusted = true
+trust_level = "trusted"
 TOML
 
 cat > "$BASELINE" <<'TOML'
@@ -36,15 +36,15 @@ developer_instructions = """\n한국어 첫 줄
 끝 줄\n"""
 baseline_only = "공통 값"
 
-[features]
-codex_git_commit = false
+[tui]
+status_line_use_colors = false
 TOML
 
 cat > "$OVERRIDE" <<'TOML'
 developer_instructions = "머신별 대체 문체"
 
-[features]
-codex_git_commit = true
+[tui]
+status_line_use_colors = true
 TOML
 
 "$REPO/codex-merge-config" "$BASELINE" "" "$CURRENT" > "$BASELINE_RESULT"
@@ -72,12 +72,12 @@ assert baseline_result["machine_only"] == current["machine_only"]
 assert baseline_result["projects"] == current["projects"]
 assert baseline_result["baseline_only"] == baseline["baseline_only"]
 assert baseline_result["developer_instructions"] == baseline["developer_instructions"]
-assert baseline_result["features"]["codex_git_commit"] is False
+assert baseline_result["tui"]["status_line_use_colors"] is False
 
 assert override_result["machine_only"] == current["machine_only"]
 assert override_result["projects"] == current["projects"]
 assert override_result["developer_instructions"] == override["developer_instructions"]
-assert override_result["features"]["codex_git_commit"] is True
+assert override_result["tui"]["status_line_use_colors"] is True
 
 assert 'developer_instructions = """' in baseline_text
 assert "한국어 첫 줄\n" in baseline_text
