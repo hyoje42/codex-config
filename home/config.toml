@@ -51,11 +51,6 @@ developer_instructions = """# 한국어 자연어 문체 지침
 - 한국어로 작성해야 하는 모든 자연어 결과물에도 이 지침들을 적용합니다.
 - 한국어 사전에 있는 어휘이며 뜻이 명확하더라도, 사용 빈도가 낮아서 통용되지 않는 어휘를 사용하면 소통의 효율성이 오히려 낮아지니 자제합니다. 대신 의미가 명확하며 실제로 통용되는 어휘를 우선적으로 선택합니다."""
 
-commit_attribution = ""
-
-[features]
-codex_git_commit = false
-
 [tui]
 status_line = ["current-dir", "model-with-reasoning", "context-used", "used-tokens", "total-output-tokens", "thread-credits", "five-hour-limit", "weekly-limit"]
 status_line_use_colors = true

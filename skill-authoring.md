@@ -2,7 +2,7 @@
 
 Codex skill 원본은 `home/skills/<skill-name>/SKILL.md` 형식으로 두고, sync 시 공식 user skill 경로인 `~/.agents/skills/<skill-name>/`에 반영한다. 이 문서는 새 skill을 만들거나 Claude skill을 Codex로 옮길 때 참고한다.
 
-공식 저장소의 bundled `skill-creator` 예시는 아직 `$CODEX_HOME/skills`를 기본값으로 안내하지만, 실제 [runtime loader](https://github.com/openai/codex/blob/main/codex-rs/core-skills/src/loader.rs)는 그 위치를 deprecated 호환 경로로 분류하고 `$HOME/.agents/skills`를 user skill 경로로 로드한다. 이 repo는 실행 동작의 기준인 loader를 따른다.
+공식 저장소의 bundled `skill-creator` 예시는 아직 `$CODEX_HOME/skills`를 기본값으로 안내하지만, 실제 [runtime loader](https://github.com/openai/codex/blob/main/codex-rs/ext/skills/src/host_roots.rs)는 그 위치를 deprecated 호환 경로로 분류하고 `$HOME/.agents/skills`를 user skill 경로로 로드한다. 이 repo는 실행 동작의 기준인 loader를 따른다.
 
 ## 형식
 
