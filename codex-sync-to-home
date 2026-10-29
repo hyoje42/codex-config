@@ -1,5 +1,8 @@
 #!/bin/bash
 #
+#   sudo apt install rsync python3
+# Requires Python 3.11+.
+#
 # repo/home → ~/.codex + ~/.agents/skills sync.
 #
 #   codex-sync-to-home            변경을 홈 대상에 적용한다
