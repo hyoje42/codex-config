@@ -10,6 +10,8 @@ When project-specific instructions exist, prefer them, but keep these global ins
 
 ## Tool Usage
 
+- Use only `gpt-6.1-sol`, `gpt-5.6-terra`, `gpt-6-luna`, and `gpt-6-sol` when selecting or invoking models for tasks or subagents. Never substitute another model, including as a fallback; report unavailability instead. This restriction applies to agent-controlled model selection, not Codex's internal automatic approval reviewer.
+
 - For file-related commands, try workspace-root-relative paths first.
 - Don't read or search files that look sensitive (`.env`, private keys, credentials, tokens, kube/aws/docker config, etc.) unless they're needed.
 - Don't run destructive changes the user didn't explicitly request (`rm`, force checkout/reset, etc.).
