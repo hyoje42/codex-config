@@ -1,0 +1,5 @@
+interface:
+  display_name: "Explain Back"
+  short_description: "Sync your understanding of what was built"
+policy:
+  allow_implicit_invocation: true

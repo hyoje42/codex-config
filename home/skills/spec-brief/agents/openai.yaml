@@ -1,0 +1,5 @@
+interface:
+  display_name: "Spec Brief"
+  short_description: "Understand a spec and its data before building"
+policy:
+  allow_implicit_invocation: true

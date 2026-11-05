@@ -1,0 +1,5 @@
+interface:
+  display_name: "Verify Computation"
+  short_description: "Check computed results against independent references"
+policy:
+  allow_implicit_invocation: false

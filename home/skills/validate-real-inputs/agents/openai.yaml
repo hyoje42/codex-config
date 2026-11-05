@@ -1,0 +1,5 @@
+interface:
+  display_name: "Validate Real Inputs"
+  short_description: "Trace real data through the input path"
+policy:
+  allow_implicit_invocation: false
