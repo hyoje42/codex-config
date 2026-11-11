@@ -22,6 +22,7 @@ Codex를 더 편하게 사용하기 위한 커스텀 skill과 전역 지시문�
 - `codex-diff-with-home` — `home/`과 두 실제 대상(`~/.codex/`, `~/.agents/skills/`)의 차이 확인. `config.toml`은 실제 sync 때 만들어질 merge 결과와 비교하고, codex 래퍼는 설치/보존 여부를 안내한다. 실체는 `codex-sync-to-home --dry-run`의 얇은 래퍼라, 무엇이 바뀌는지 계산하는 로직(래퍼 판정·legacy/retired skill 탐지 포함)은 `codex-sync-to-home` 한 곳에만 있다.
 - `codex-merge-config` — `config.toml` merge helper. `codex-sync-to-home`/`codex-diff-with-home`에서 호출하며, 줄바꿈이 있는 문자열은 읽기 쉬운 TOML multiline basic string으로 정규화한다.
 - `tests/config-merge.sh` — current + baseline + override의 보존·우선순위와 multiline 문자열 round-trip을 임시 파일에서 검증한다.
+- `tests/inspect-session.py` — `python3 -B tests/inspect-session.py`로 세션 검색·rollout 파싱·마스킹·읽기 전용 동작을 임시 기록에서 검증한다. `inspect-session`은 홈 적용 후 `$inspect-session <thread ID 또는 제목 또는 rollout 경로>`로 호출한다.
 - `tests/sync-home.sh` — 임시 HOME과 repo 사본에서 diff/sync를 실행해, dry-run이 아무것도 쓰지 않는지·dry-run이 보고한 항목(config merge·`developer_instructions` 전달·래퍼 판정·skill 경로·공유 디렉터리 보호·고아/legacy/retired skill 포함)이 sync에서 그대로 적용되는지·sync 직후 재실행이 멱등한지 검증한다. 실제 `~/.codex`·`~/.agents`·`~/.bashrc`는 건드리지 않는다.
 
 ## 작업 흐름
