@@ -290,11 +290,72 @@ class DigestTests(unittest.TestCase):
         ])
         self.assertEqual(digest.state_ops(digest.Session(path).active()), [])
 
+    def test_state_ops_detect_shell_wrappers_options_and_word_hashes(self):
+        commands = [
+            "curl http://x/#a; git push",
+            "echo a#b && git push",
+            "if true; then git commit -m x; fi",
+            "for r in a b; do git push origin $r; done",
+            "{ git push; }",
+            "! git push",
+            "sudo -u me git push",
+            "sudo -g staff git push",
+            "sudo -E -u me -g staff env -i FOO=1 command -- git push",
+            "env FOO=1 git push",
+            "command -- git push",
+            "exec git push",
+            "nohup git push",
+            "while git pull; do true; done",
+            "until git pull; do true; done",
+            "if false; then true; elif git pull; then true; else git push; fi",
+            "time git push",
+            "git --no-pager -C dir push",
+            "git -c user.name=me --git-dir repo --work-tree dir --namespace ns --exec-path bin push",
+            "git --git-dir=repo push",
+            "git pull --rebase",
+            "bash ./codex-sync-to-home",
+            "sh ./codex-sync-to-home",
+            "zsh ./codex-sync-to-home",
+            "echo hi # git status\ngit push",
+            'git push # "unfinished quote',
+            'echo hi # "unfinished quote\ngit push',
+        ]
+        for cmd in commands:
+            with self.subTest(cmd=cmd):
+                path = self.write([
+                    record("response_item", type="function_call", name="exec_command", call_id="a",
+                           arguments=json.dumps({"cmd": cmd})),
+                ])
+                self.assertEqual(len(digest.state_ops(digest.Session(path).active())), 1)
+
+    def test_state_ops_ignore_comments_and_wrapped_read_only_commands(self):
+        commands = [
+            "echo hi # git push",
+            "echo hi;# git push",
+            "echo hi # comment; git push",
+            "# git push\necho hi",
+            "env FOO=1 git status",
+            "sudo -u me git --no-pager status",
+            "git --git-dir push status",
+            "git --work-tree push status",
+            "git --namespace push status",
+            "git --exec-path push status",
+            "bash ./codex-sync-to-home --dry-run",
+            "echo '#literal; git push'",
+        ]
+        for cmd in commands:
+            with self.subTest(cmd=cmd):
+                path = self.write([
+                    record("response_item", type="function_call", name="exec_command", call_id="a",
+                           arguments=json.dumps({"cmd": cmd})),
+                ])
+                self.assertEqual(digest.state_ops(digest.Session(path).active()), [])
+
     def test_state_ops_preserve_conditions_and_do_not_infer_completion(self):
         cases = [
             ("false && git push origin main; true", {"exit_code": 0}, "호출 종료 0"),
-            ("git push origin main", {"session_id": 123, "exit_code": None}, "실행 중"),
-            ("git push origin main", "Process running with session ID 123", "실행 중"),
+            ("git push origin main", {"session_id": 123, "exit_code": None}, "백그라운드 실행"),
+            ("git push origin main", "Process running with session ID 123", "백그라운드 실행"),
             ("git push origin main", {"output": "", "isError": False}, "완료 미확인"),
             ("git push origin main", "Process exited with code 1\nFinal output:\nfailed", "호출 종료 1"),
         ]
@@ -309,6 +370,35 @@ class DigestTests(unittest.TestCase):
                 self.assertIn("개별 실행 여부는 미확인", section)
                 self.assertIn(expected + "  " + cmd, section)
                 self.assertNotIn("성공", section)
+
+    def test_overview_limits_ops_independently_from_files(self):
+        self.write([
+            record("response_item", type="custom_tool_call", name="apply_patch", call_id="patch",
+                   input="*** Add File: a.py\n*** Add File: b.py\n*** Add File: c.py"),
+            *[record("response_item", type="function_call", name="exec_command", call_id=f"op-{i}",
+                     arguments=json.dumps({"cmd": f"git push origin branch-{i:02d}"})) for i in range(17)],
+        ])
+        for options, limit, file_count in [
+                ((), 15, 3),
+                (("--files", "1"), 15, 1),
+                (("--ops", "2"), 2, 3),
+                (("--files", "1", "--ops", "2"), 2, 1),
+                (("--ops", "17"), 17, 3)]:
+            with self.subTest(options=options):
+                code, out, _ = self.cli("overview", SID, *options)
+                self.assertEqual(code, 0)
+                section = out.split("git·sync 명령 후보를 포함한 셸 호출", 1)[1].split("\n\n", 1)[0]
+                self.assertEqual(section.count("git push origin branch-"), limit)
+                self.assertIn("git push origin branch-16", section)
+                self.assertIn(f"git push origin branch-{17 - limit:02d}", section)
+                if limit < 17:
+                    self.assertNotIn(f"git push origin branch-{16 - limit:02d}", section)
+                    self.assertIn(f"… 이전 호출 {17 - limit}개 생략", section)
+                else:
+                    self.assertNotIn("생략", section)
+                self.assertIn("a.py", out)
+                self.assertEqual("b.py" in out, file_count > 1)
+                self.assertEqual("c.py" in out, file_count > 1)
 
 
 if __name__ == "__main__":

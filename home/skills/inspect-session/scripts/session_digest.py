@@ -200,12 +200,29 @@ def failed(result):
         r"\s*(?:Error:|tool execution failed\b|rejected by user\b|permission denied\b)", text, re.I))
 
 
+SHELL_KEYWORDS = {"if", "then", "elif", "else", "while", "until", "do", "!", "{", "time"}
+COMMAND_PREFIXES = {"sudo", "env", "command", "exec", "nohup"}
+SHELLS = {"bash", "sh", "zsh"}
+GIT_OPTIONS_WITH_ARG = {"-C", "-c", "--git-dir", "--work-tree", "--namespace", "--exec-path"}
+
+
 def state_command(words):
     """Recognize command positions, never command names inside arguments."""
     words = [word[1:-1] if len(word) > 1 and word[0] == word[-1] and word[0] in "'\""
              else word for word in words]
-    while words and re.match(r"^[A-Za-z_]\w*=", words[0]):
-        words = words[1:]
+    while words:
+        head = words[0]
+        if re.match(r"^[A-Za-z_]\w*=", head) or head in SHELL_KEYWORDS:
+            words = words[1:]
+        elif head in COMMAND_PREFIXES:
+            words = words[1:]
+            while words and words[0].startswith("-"):
+                takes_value = head == "sudo" and words[0] in {"-u", "-g"}
+                words = words[2:] if takes_value else words[1:]
+        elif Path(head).name in SHELLS and len(words) > 1 and not words[1].startswith("-"):
+            words = words[1:]
+        else:
+            break
     if not words:
         return False
     name = Path(words[0]).name
@@ -214,12 +231,12 @@ def state_command(words):
     if name != "git":
         return False
     args = words[1:]
-    while args and args[0] in ("-C", "-c"):
-        args = args[2:]
+    while args and args[0].startswith("-"):
+        args = args[2:] if args[0] in GIT_OPTIONS_WITH_ARG else args[1:]
     if not args:
         return False
     subcommand, rest = args[0], args[1:]
-    if subcommand in {"commit", "push", "reset", "rebase", "merge", "cherry-pick",
+    if subcommand in {"commit", "push", "pull", "reset", "rebase", "merge", "cherry-pick",
                       "revert", "checkout", "switch", "restore", "clean", "rm", "mv"}:
         return True
     if subcommand == "stash":
@@ -253,8 +270,14 @@ def state_shell_call(command):
             continue
         lexer = shlex.shlex(pending, posix=False, punctuation_chars=";&|()<>")
         lexer.whitespace_split = True
+        # A shell comment starts at a word boundary, not inside a URL or argument.
+        lexer.commenters = ""
         try:
-            tokens = list(lexer)
+            tokens = []
+            for token in lexer:
+                if token.startswith("#"):
+                    break
+                tokens.append(token)
         except ValueError:
             pending += "\n"
             continue
@@ -320,7 +343,7 @@ def shell_call_status(result):
         if type(code) is int:
             return f"호출 종료 {code}"
         if result.get("session_id") is not None:
-            return "실행 중"
+            return "백그라운드 실행"
         text = result.get("output")
         text = text if isinstance(text, str) else block_text(result.get("content"))
     else:
@@ -332,7 +355,7 @@ def shell_call_status(result):
         if match:
             return f"호출 종료 {match[1]}"
         if re.fullmatch(r"Process running with session ID \S+", line.strip()):
-            return "실행 중"
+            return "백그라운드 실행"
     return "호출 실패" if failed(result) else "완료 미확인"
 
 
@@ -596,11 +619,11 @@ def overview(session, catalog, args, tz):
     ops = state_ops(events)
     if ops:
         emit("git·sync 명령 후보를 포함한 셸 호출 (전체 호출 결과; 개별 실행 여부는 미확인):")
-        for event, line in ops[-args.files:]:
+        for event, line in ops[-args.ops:]:
             status = shell_call_status(event["result"])
             emit(f"  #{event['n']} {time_text(event['ts'], tz)} {status}  {display(line, 140, True)}")
-        if len(ops) > args.files:
-            emit(f"  … 이전 명령 {len(ops) - args.files}개 생략")
+        if len(ops) > args.ops:
+            emit(f"  … 이전 호출 {len(ops) - args.ops}개 생략")
     for label, kind, first in (("첫 요청", "U", True), ("마지막 요청", "U", False),
                                ("최근 압축 요약", "C", False), ("마지막 응답", "A", False)):
         matches = [e for e in events if e["kind"] == kind]
@@ -674,6 +697,7 @@ def parser():
             sub.add_argument("--width", type=nonnegative, default=600)
         if command == "overview":
             sub.add_argument("--files", type=positive, default=15)
+            sub.add_argument("--ops", type=positive, default=15, help="표시할 git·sync 셸 호출의 최대 개수입니다.")
         elif command == "timeline":
             sub.add_argument("--full", action="store_true")
             sub.add_argument("--from", dest="from_n", type=positive)
