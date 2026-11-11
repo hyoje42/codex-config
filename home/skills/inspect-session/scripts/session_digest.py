@@ -6,6 +6,7 @@ import gzip
 import json
 import os
 import re
+import shlex
 import sys
 from collections import Counter
 from datetime import datetime
@@ -197,6 +198,142 @@ def failed(result):
     # In particular, neither ValueError: nor sqlite3.Error: is an error envelope.
     return len(text) <= 1000 and bool(re.match(
         r"\s*(?:Error:|tool execution failed\b|rejected by user\b|permission denied\b)", text, re.I))
+
+
+def state_command(words):
+    """Recognize command positions, never command names inside arguments."""
+    words = [word[1:-1] if len(word) > 1 and word[0] == word[-1] and word[0] in "'\""
+             else word for word in words]
+    while words and re.match(r"^[A-Za-z_]\w*=", words[0]):
+        words = words[1:]
+    if not words:
+        return False
+    name = Path(words[0]).name
+    if name.endswith("sync-to-home"):
+        return not any(flag in words[1:] for flag in ("--dry-run", "-n"))
+    if name != "git":
+        return False
+    args = words[1:]
+    while args and args[0] in ("-C", "-c"):
+        args = args[2:]
+    if not args:
+        return False
+    subcommand, rest = args[0], args[1:]
+    if subcommand in {"commit", "push", "reset", "rebase", "merge", "cherry-pick",
+                      "revert", "checkout", "switch", "restore", "clean", "rm", "mv"}:
+        return True
+    if subcommand == "stash":
+        return not rest or rest[0] not in {"list", "show"}
+    if subcommand == "tag":
+        return bool(rest) and (not rest[0].startswith("-") or
+                              rest[0] in {"-a", "-s", "-d", "-f", "--delete", "--force"})
+    if subcommand == "submodule":
+        return bool(rest) and rest[0] == "update"
+    return subcommand == "branch" and bool(rest) and rest[0] in {"-d", "-D", "-m", "-M"}
+
+
+def state_shell_call(command):
+    """Conservative shell scan; retain the call's control flow, omit heredoc bodies.
+
+    This is not a shell interpreter. Matches are candidates, never proof that
+    a branch ran. Unsupported or unfinished quoting is not guessed.
+    """
+    headers, heredocs = [], []
+    pending = ""
+    found = False
+    for line in command.splitlines():
+        if heredocs:
+            delimiter, strip_tabs = heredocs[0]
+            if (line.lstrip("\t") if strip_tabs else line) == delimiter:
+                heredocs.pop(0)
+            continue
+        pending += line
+        if pending.endswith("\\"):
+            pending = pending[:-1]
+            continue
+        lexer = shlex.shlex(pending, posix=False, punctuation_chars=";&|()<>")
+        lexer.whitespace_split = True
+        try:
+            tokens = list(lexer)
+        except ValueError:
+            pending += "\n"
+            continue
+        headers.append(pending)
+        pending = ""
+        for index, token in enumerate(tokens[:-1]):
+            if token == "<<":
+                delimiter = tokens[index + 1]
+                strip_tabs = delimiter.startswith("-")
+                delimiter = delimiter[1:] if strip_tabs else delimiter
+                if len(delimiter) > 1 and delimiter[0] == delimiter[-1] and delimiter[0] in "'\"":
+                    delimiter = delimiter[1:-1]
+                heredocs.append((delimiter, strip_tabs))
+        words = []
+        for token in tokens + [";"]:
+            if token and all(char in ";&|()" for char in token):
+                found = state_command(words) or found
+                words = []
+            else:
+                words.append(token)
+    if pending or heredocs:
+        return ""
+    return "\n".join(headers) if found else ""
+
+
+def command_text(value):
+    if isinstance(value, dict):
+        value = value.get("cmd", value.get("command", ""))
+    if isinstance(value, list):
+        return " ".join(str(part) for part in value)
+    return value if isinstance(value, str) else ""
+
+
+def state_ops(events):
+    """Shell calls containing candidate state operations, with call-level results."""
+    ops = []
+    for event in events:
+        if event["kind"] != "T" or event.get("tool", "").rsplit(".", 1)[-1] not in {
+                "exec_command", "shell_command", "shell", "local_shell_call", "command_execution"}:
+            continue
+        command = state_shell_call(command_text(event.get("input")))
+        if command:
+            ops.append((event, command))
+    return ops
+
+
+def shell_call_status(result):
+    if result is None:
+        return "결과 없음"
+    if isinstance(result, str):
+        try:
+            decoded = json.loads(result)
+        except ValueError:
+            decoded = None
+        if isinstance(decoded, dict):
+            result = decoded
+    if isinstance(result, dict):
+        metadata = result.get("metadata")
+        metadata = metadata if isinstance(metadata, dict) else {}
+        code = result.get("exit_code")
+        if type(code) is not int:
+            code = metadata.get("exit_code")
+        if type(code) is int:
+            return f"호출 종료 {code}"
+        if result.get("session_id") is not None:
+            return "실행 중"
+        text = result.get("output")
+        text = text if isinstance(text, str) else block_text(result.get("content"))
+    else:
+        text = as_text(result)
+    for line in text.splitlines()[:12]:
+        if line.strip() == "Final output:":
+            break
+        match = re.fullmatch(r"Process exited with code (-?\d+)", line.strip())
+        if match:
+            return f"호출 종료 {match[1]}"
+        if re.fullmatch(r"Process running with session ID \S+", line.strip()):
+            return "실행 중"
+    return "호출 실패" if failed(result) else "완료 미확인"
 
 
 def patch_paths(changes):
@@ -456,6 +593,14 @@ def overview(session, catalog, args, tz):
         emit("구조화된 파일 변경 기록: " + ", ".join(f"#{e['n']}" for e in file_events[-args.files:]))
         if len(file_events) > args.files:
             emit(f"  … 외 {len(file_events) - args.files}개")
+    ops = state_ops(events)
+    if ops:
+        emit("git·sync 명령 후보를 포함한 셸 호출 (전체 호출 결과; 개별 실행 여부는 미확인):")
+        for event, line in ops[-args.files:]:
+            status = shell_call_status(event["result"])
+            emit(f"  #{event['n']} {time_text(event['ts'], tz)} {status}  {display(line, 140, True)}")
+        if len(ops) > args.files:
+            emit(f"  … 이전 명령 {len(ops) - args.files}개 생략")
     for label, kind, first in (("첫 요청", "U", True), ("마지막 요청", "U", False),
                                ("최근 압축 요약", "C", False), ("마지막 응답", "A", False)):
         matches = [e for e in events if e["kind"] == kind]

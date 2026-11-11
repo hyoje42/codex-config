@@ -257,6 +257,59 @@ class DigestTests(unittest.TestCase):
         self.assertGreaterEqual(out.count("외 2개"), 2)
         self.assertIn("외 1개", out)
 
+    def test_state_changing_commands_are_listed_without_read_only_git(self):
+        def shell(call_id, cmd, code=0):
+            return [record("response_item", type="function_call", name="exec_command", call_id=call_id,
+                           arguments=json.dumps({"cmd": cmd})),
+                    record("response_item", type="function_call_output", call_id=call_id,
+                           output=json.dumps({"output": "", "metadata": {"exit_code": code}}))]
+        self.write([
+            *shell("a", "git status && git commit -F - <<'EOF'\nfix: avoid git push race\nEOF"),
+            *shell("b", "git -C sub push origin main", code=1),
+            *shell("c", "git merge-base a b; git stash list; git tag --points-at HEAD; git checkout-index -f x"),
+            *shell("d", "codex-sync-to-home --dry-run"),
+            *shell("e", "codex-sync-to-home"),
+        ])
+        out = self.cli("overview", SID)[1]
+        section = out.split("git·sync 명령 후보를 포함한 셸 호출", 1)[1].split("\n\n", 1)[0]
+        self.assertIn("호출 종료 0  git status && git commit -F - <<'EOF'", section)
+        self.assertNotIn("race", section)
+        self.assertIn("호출 종료 1  git -C sub push origin main", section)
+        self.assertIn("호출 종료 0  codex-sync-to-home", section)
+        for read_only in ("merge-base", "stash list", "points-at", "checkout-index", "--dry-run"):
+            self.assertNotIn(read_only, section)
+
+    def test_state_ops_ignore_patch_and_quoted_command_text(self):
+        path = self.write([
+            record("response_item", type="custom_tool_call", name="apply_patch", call_id="patch",
+                   input="*** Begin Patch\n*** Add File: guide.md\n+Run git push origin main\n*** End Patch"),
+            record("response_item", type="function_call", name="exec_command", call_id="print",
+                   arguments=json.dumps({"cmd": "printf '%s\\n' 'git push origin main; git reset --hard'"})),
+            record("response_item", type="function_call", name="exec_command", call_id="quoted",
+                   arguments=json.dumps({"cmd": 'echo "text\ngit push origin main\ntext"'})),
+        ])
+        self.assertEqual(digest.state_ops(digest.Session(path).active()), [])
+
+    def test_state_ops_preserve_conditions_and_do_not_infer_completion(self):
+        cases = [
+            ("false && git push origin main; true", {"exit_code": 0}, "호출 종료 0"),
+            ("git push origin main", {"session_id": 123, "exit_code": None}, "실행 중"),
+            ("git push origin main", "Process running with session ID 123", "실행 중"),
+            ("git push origin main", {"output": "", "isError": False}, "완료 미확인"),
+            ("git push origin main", "Process exited with code 1\nFinal output:\nfailed", "호출 종료 1"),
+        ]
+        for cmd, result, expected in cases:
+            with self.subTest(result=result):
+                self.write([
+                    record("response_item", type="function_call", name="exec_command", call_id="a",
+                           arguments=json.dumps({"cmd": cmd})),
+                    record("response_item", type="function_call_output", call_id="a", output=result),
+                ])
+                section = self.cli("overview", SID)[1].split("git·sync 명령 후보를 포함한 셸 호출", 1)[1].split("\n\n", 1)[0]
+                self.assertIn("개별 실행 여부는 미확인", section)
+                self.assertIn(expected + "  " + cmd, section)
+                self.assertNotIn("성공", section)
+
 
 if __name__ == "__main__":
     unittest.main()
