@@ -23,6 +23,7 @@ Codex를 더 편하게 사용하기 위한 커스텀 skill과 전역 지시문�
 - `codex-merge-config` — `config.toml` merge helper. `codex-sync-to-home`/`codex-diff-with-home`에서 호출하며, 줄바꿈이 있는 문자열은 읽기 쉬운 TOML multiline basic string으로 정규화한다.
 - `tests/config-merge.sh` — current + baseline + override의 보존·우선순위와 multiline 문자열 round-trip을 임시 파일에서 검증한다.
 - `tests/inspect-session.py` — `python3 -B tests/inspect-session.py`로 세션 검색·rollout 파싱·마스킹·읽기 전용 동작을 임시 기록에서 검증한다. `inspect-session`은 홈 적용 후 `$inspect-session <thread ID 또는 제목 또는 rollout 경로>`로 호출한다.
+- `tests/run-loop.py` — `python3 -B tests/run-loop.py`로 임시 Git 저장소에서 변경·인덱스·실행 권한·검증 자료의 변조 감지와 Codex 로그 표시를 검증한다.
 - `tests/sync-home.sh` — 임시 HOME과 repo 사본에서 diff/sync를 실행해, dry-run이 아무것도 쓰지 않는지·dry-run이 보고한 항목(config merge·`developer_instructions` 전달·래퍼 판정·skill 경로·공유 디렉터리 보호·고아/legacy/retired skill 포함)이 sync에서 그대로 적용되는지·sync 직후 재실행이 멱등한지 검증한다. 실제 `~/.codex`·`~/.agents`·`~/.bashrc`는 건드리지 않는다.
 
 ## 작업 흐름
@@ -31,6 +32,12 @@ Codex를 더 편하게 사용하기 위한 커스텀 skill과 전역 지시문�
 2. `./codex-diff-with-home`으로 차이를 확인한다.
 3. 필요할 때 `./codex-sync-to-home`으로 `~/.codex/`에 반영한다.
 4. `git commit`으로 변경 이력을 남긴다(`local/`의 실제 머신 값은 커밋되지 않는다).
+
+## run-loop
+
+홈 적용 후 `$run-loop <목표>`로 호출하면 스펙·계획을 독립 검토한 뒤 사용자 승인을 받고, 구현·검사·리뷰·수정을 반복하여 최종 판단을 요청한다. `$run-loop --on <목표>`는 기존 맥락 파일, 실행 가능한 검사, 서로 다른 구현·검토 모델 등의 조건을 충족할 때 스펙 승인 이후 최종 보고까지 진행한다. `$run-loop resume [slug]`로 `.loop/`에 저장한 작업을 재개한다.
+
+기본 실행 방식은 Codex 서브에이전트이며, 역할별로 `runner=codex-cli`를 지정하면 별도 `codex exec` 프로세스를 쓴다. 모델과 reasoning effort는 임의로 고정하지 않는다. 호출 옵션과 조건은 [SKILL.md](./home/skills/run-loop/SKILL.md), 실행 도구·권한·로그의 차이는 [runners.md](./home/skills/run-loop/references/runners.md)를 참고한다.
 
 ## config.toml merge
 
