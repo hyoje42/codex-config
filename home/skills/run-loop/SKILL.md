@@ -60,14 +60,14 @@ These matter only when `--auto` was given. Check 1, 4, and 5 right after [0]. Ch
 
 In auto mode, also stop when a 5-b finding cites no spec item (a spec gap) or the reviewer could not check a spec item.
 
-Present every stop with [references/decision-package.md](references/decision-package.md), stating the decision and why it needs the user. Use an available question tool only when its contract permits that kind of question; otherwise ask in the final response. For required decisions, wait for an explicit reply. A timeout, preselected option, or tool unavailability is not approval. Honor an already approved, still-valid spec rather than asking again. When the user chooses to stop, record it in `state.md`, leave the working tree as it is, and report the change list. Never revert work on your own.
+Present every stop with [references/decision-package.md](references/decision-package.md), writing out what is being decided and why it needs the user. Print the package as message text before opening a question dialog; a question alone is not a package. Use an available question tool only when its contract permits that kind of question; otherwise include the full package followed by the question in the final response. For required decisions, wait for an explicit reply. A timeout, preselected option, or tool unavailability is not approval. Honor an already approved, still-valid spec rather than asking again. When the user chooses to stop, record it in `state.md`, leave the working tree as it is, and report the change list. Never revert work on your own.
 
 ## State on Disk
 
 ```text
 .loop/context.md                 # [0] asset shared by every loop in this repo
 .loop/YYMMDD-{slug}/             # one folder per task; date in KST: TZ='Asia/Seoul' date +"%y%m%d"
-  state.md                       # mode, slots, resolved roster, current stage, attempt counters, open escalations
+  state.md                       # mode, slots, resolved roster, current stage, attempt counters, pending stop and decisions, open escalations
   context-draft.md               # only when [0] had to draft the context file; moved on spec approval
   1-intent.md  2-spec.md  2-plan-review.md  3-slices.md  slices/<id>.md
   gates/                         # gate scripts and fixtures you write; covered by the snapshot
@@ -109,7 +109,7 @@ End every stage with one line that carries both markers, including when you cont
 
 `[0] 맥락 · 현재 위치: 0번` · `[1] 의도 · 현재 위치: 1번` · `[2] 스펙 · 현재 위치: 2번` · `[3] 분해 · 현재 위치: 3번` · `[4] 구현 · 현재 위치: 4번` · `[5-a] 게이트 · 현재 위치: 5-a` · `[5-b] 외부 · 현재 위치: 5-b` · `[6] 개선 · 현재 위치: 6번`
 
-Between stops, keep updates brief: the marker and one short status line, plus progress updates required by the host. This does not replace a complete final response.
+Between stops, keep updates brief: the marker and one short status line, plus progress updates required by the host. At a stop, print the full decision package. This does not replace a complete final response.
 
 ## Roster
 
@@ -144,7 +144,7 @@ Roles: `implementer`, `plan-reviewer`, `verifier`. Fields: `runner` (`agent` | `
 2. Fill the slots from `.loop/context.md`, else from the defaults: 5-a gates, 5-b judges, done definition, K, and risk tier. A gate you add yourself must run from the repository root in any later session: put any script or fixture it needs under the task folder's `gates/`, never in a session scratch directory. Then check auto-mode preconditions 2 and 3.
 3. Draft `3-slices.md` now (see [3]) so the user approves the destination and the route together.
 4. Before the user sees anything, run `plan-reviewer` with [references/prompts.md](references/prompts.md#plan-review) on the intent, spec, slots, and slices. Save each round's findings and what you did about them to `2-plan-review.md`. If round 1 passes, stop there. If it fails, apply the fixes and run round 2 with a fresh agent, passing the round-1 findings and your changes. If round 2 also fails, apply its fixes but do not review again: list them in the package as applied without re-review. A finding you disagree with goes into the package as an open point in either round.
-5. Present the spec package and ask: approve, change, or stop. This stop happens in both modes. If the user changes the spec, update the slices, and re-run the plan review only when the change is material. Roster changes here apply to subsequent runs; they alone do not require repeating an already completed plan review.
+5. Print the spec package with every spec item written out, then ask: approve, change, or stop. This stop happens in both modes. If the user changes the spec, update the slices, and re-run the plan review only when the change is material. Roster changes here apply to subsequent runs; they alone do not require repeating an already completed plan review.
 
 ### [3] Decompose
 
@@ -177,7 +177,7 @@ Each slice in `3-slices.md` has an ID, the files it may create, modify, or delet
    - **A spec item could not be checked:** not a pass. Handle it like a spec gap.
    - **Notes** are not routed. Copy them into the final package or the report.
    - Never relabel a spec gap as a defect to avoid stopping. When unsure, treat it as a spec gap.
-5. In mode: once the judges pass, or what remains needs a decision, write the context-file proposal ([6] step 2), then present the final package and ask: accept, send back to the spec (saying what is wrong), or stop. Auto mode: if every judge passes, continue to [6].
+5. In mode: once the judges pass, or what remains needs a decision, write the context-file proposal ([6] step 2), then print the final package and ask: accept, send back to the spec (saying what is wrong), or stop. Auto mode: if every judge passes, continue to [6].
 6. When the user sends the work back to the spec, return to [2] and get the changed spec approved again. That approval starts R again from zero. K keeps counting for a slice that keeps its ID and starts at zero for a new slice.
 
 Automatic rework is a second deliberate departure. The playbook sends every 5-b failure back to [2]; here a failure that cites a spec item is reworked without the user, bounded by R, and anything that questions the spec itself still goes to the user.
@@ -190,7 +190,9 @@ Automatic rework is a second deliberate departure. The playbook sends every 5-b 
 
 ## Resume
 
-When invoked with `resume [slug]`, or when an unfinished `.loop/*/state.md` matches the goal, read `state.md` and the stage files. If `start.snap` exists, use `changed start.snap` to inventory the loop and `changed <latest verified post snapshot>` to detect later drift before continuing. If no start snapshot exists yet, resume the pre-implementation stage without calling `changed` on a missing file. Outside Git, compare the recorded artifact inventory instead. Distinguish loop edits from later user edits; when attribution is unclear or no verified post snapshot exists after an interrupted run, inspect the evidence and stop before overwriting ambiguous work. Do not re-ask questions answered in `1-intent.md` or re-approve an approved spec unless the repo changed in a way that invalidates it; if it did, say what changed.
+When invoked with `resume [slug]`, or when an unfinished `.loop/*/state.md` matches the goal, read `state.md` and the stage files. If `start.snap` exists, use `changed start.snap` to inventory the loop and `changed <latest verified post snapshot>` to detect later drift before continuing. If no start snapshot exists yet, resume the pre-implementation stage without calling `changed` on a missing file. Outside Git, compare the recorded artifact inventory instead. Distinguish loop edits from later user edits; when attribution is unclear or no verified post snapshot exists after an interrupted run, inspect the evidence and stop before overwriting ambiguous work.
+
+Reconcile any pending stop in `state.md` with explicit replies already available in the session. If the decision is still unanswered, reconstruct and print the full package from the stage files before asking again. Record answered decisions and clear the resolved stop. Do not re-ask questions answered in `1-intent.md` or re-approve an approved spec unless the repo changed in a way that invalidates it; if it did, say what changed.
 
 ## Rules
 
