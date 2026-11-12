@@ -6,9 +6,9 @@
 #   tree_snapshot.sh changed <snapshot>  print every path whose state differs from a saved
 #                                        snapshot, plus "!HEAD" / "!INDEX" if either moved
 #
-# A snapshot lists HEAD, an index fingerprint, and one content hash per file that differs
+# A snapshot lists HEAD, an index fingerprint, and a content hash plus the executable bit per regular file that differs
 # from HEAD or is untracked. Git-ignored files are left out. Under .loop/ only the grading
-# inputs (context and its draft, intent, spec, slices, gate results, change-set diff) are included.
+# inputs (context and its draft, intent, spec, slices, gate results, change-set diff, gates/, evidence/) are included.
 # Paths containing newlines are not supported.
 set -euo pipefail
 
@@ -50,6 +50,14 @@ take() {
            .loop/*/5a-result.md .loop/*/5b-changes.diff; do
     if [ -f "$g" ]; then printf 'FILE %s %s\n' "$(git hash-object -- "$g")" "$g"; fi
   done
+  # Gate files and judge evidence stay covered even when .loop/ is git-ignored.
+  if [ -d .loop ]; then
+    find .loop -mindepth 3 -type f \( -path '.loop/*/gates/*' -o -path '.loop/*/evidence/*' \) -print0 | sort -z | while IFS= read -r -d '' g; do
+      local gmode=644
+      if [ -x "$g" ]; then gmode=755; fi
+      printf 'FILE %s:%s %s\n' "$gmode" "$(git hash-object -- "$g")" "$g"
+    done
+  fi
 }
 
 changed() {

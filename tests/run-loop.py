@@ -91,6 +91,34 @@ class SnapshotTests(unittest.TestCase):
         self.write("ignored/cache", "cache")
         self.assertEqual(self.changed(), {".loop/task/2-spec.md"})
 
+    def test_gate_and_evidence_content_changes(self):
+        paths = [".loop/task/gates/nested/check.sh", ".loop/task/evidence/baseline output.txt"]
+        for path in paths:
+            self.write(path, "before\n")
+        self.snapshot()
+        for path in paths:
+            self.write(path, "after\n")
+        self.write(".loop/task/logs/run.jsonl", "log")
+        self.assertEqual(self.changed(), set(paths))
+
+    def test_gate_and_evidence_creation_and_deletion(self):
+        removed = ".loop/task/evidence/old.txt"
+        added = ".loop/other-task/gates/new.sh"
+        self.write(removed, "baseline\n")
+        self.snapshot()
+        (self.repo / removed).unlink()
+        self.write(added, "check\n")
+        self.assertEqual(self.changed(), {removed, added})
+
+    def test_gate_and_evidence_executable_changes(self):
+        paths = [".loop/task/gates/check.sh", ".loop/task/evidence/reproduce.sh"]
+        for path in paths:
+            self.write(path, "check\n")
+        self.snapshot()
+        for path in paths:
+            (self.repo / path).chmod(0o755)
+        self.assertEqual(self.changed(), set(paths))
+
     def test_unborn_repository(self):
         empty = self.repo / "unborn"
         empty.mkdir()

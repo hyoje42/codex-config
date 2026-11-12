@@ -16,11 +16,11 @@ Files you may create, modify, or delete: <list>. Do not touch any other file; ch
 Pattern to follow: <path of the closest existing pattern, and what to copy from it>
 Context rules: <relevant sections of .loop/context.md, verbatim>
 Gate commands to run before reporting: <commands>
-<how to run them: see the two variants below the template>
+<how to run them: see below the template>
 Previous failures to fix, if any: <gate output, out-of-scope changes to undo, or reviewer findings>
 
 Other workers may be editing other files in this working tree at the same time. If a gate fails because of a file outside your list, report it instead of fixing it.
-Do not commit, stage, stash, push, read .env* or credential files, or run destructive commands. Do not read or write anything under .loop/.
+Do not commit, stage, stash, push, read .env* or credential files, or run destructive commands. Do not read or write anything under .loop/; running a supplied gate command that points there is allowed, but modifying its scripts or fixtures is not.
 
 Report:
 1. Files changed and what changed in each.

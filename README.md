@@ -35,9 +35,9 @@ Codex를 더 편하게 사용하기 위한 커스텀 skill과 전역 지시문�
 
 ## run-loop
 
-홈 적용 후 `$run-loop <목표>`로 호출하면 스펙·계획을 독립 검토한 뒤 사용자 승인을 받고, 구현·검사·리뷰·수정을 반복하여 최종 판단을 요청한다. `$run-loop --on <목표>`는 기존 맥락 파일, 실행 가능한 검사, 서로 다른 구현·검토 모델 등의 조건을 충족할 때 스펙 승인 이후 최종 보고까지 진행한다. `$run-loop resume [slug]`로 `.loop/`에 저장한 작업을 재개한다.
+홈 적용 후 `$run-loop <목표>`로 호출하면 스펙·계획을 독립 검토한 뒤 사용자 승인을 받고, 구현·검사·리뷰·수정을 반복하여 최종 판단을 요청한다. `$run-loop --auto <목표>`는 기존 맥락 파일, 실행 가능한 검사, 서로 다른 구현·검토 모델 등의 조건을 충족할 때 스펙 승인 이후 최종 보고까지 진행한다. `$run-loop resume [slug]`로 `.loop/`에 저장한 작업을 재개한다.
 
-기본 실행 방식은 Codex 서브에이전트이며, 역할별로 `runner=codex-cli`를 지정하면 별도 `codex exec` 프로세스를 쓴다. 모델과 reasoning effort는 임의로 고정하지 않는다. 호출 옵션과 조건은 [SKILL.md](./home/skills/run-loop/SKILL.md), 실행 도구·권한·로그의 차이는 [runners.md](./home/skills/run-loop/references/runners.md)를 참고한다.
+기본 실행 방식은 Codex 서브에이전트다. 호출할 때나 스펙 승인 단계에서 “검증자는 별도 CLI 프로세스로 실행해”처럼 말로 요청하면 해당 역할을 `codex exec`로 실행하도록 설정한다. 최종 검증 역할 이름은 `verifier`이며, 모델·reasoning effort·실행 방식은 사용자 지정 값이나 기본값을 따른다. 호출 옵션과 조건은 [SKILL.md](./home/skills/run-loop/SKILL.md), 실행 도구·권한·로그의 차이는 [runners.md](./home/skills/run-loop/references/runners.md)를 참고한다.
 
 ## config.toml merge
 

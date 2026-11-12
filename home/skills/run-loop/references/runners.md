@@ -9,7 +9,7 @@ Use the native subagent tools exposed by the host. This skill explicitly request
 - Start every worker with a self-contained prompt from [prompts.md](prompts.md). For judges, create a new agent on every round; never reuse an implementer thread.
 - On hosts exposing `collaboration.spawn_agent`, pass `task_name`, `message`, and `fork_turns="none"`. Pass `model` and `reasoning_effort` only when explicitly configured and authorized. This interface has no `agent_type` parameter.
 - On hosts exposing `spawn_agent` with `fork_context`, use `fork_context=false` and its actual prompt/type parameters. Pass `agent_type` or model/effort only if that schema supports them. A role named "reviewer" does not by itself prove a different model or a read-only sandbox.
-- If the host cannot guarantee a fresh conversation, use an available `codex-cli` runner and disclose the change before the spec is approved. If neither can do it, report the blocker. Never silently downgrade to inherited-history review.
+- If the host cannot guarantee a fresh conversation, report the limitation and propose an available `codex-cli` runner as a capability fallback. Ask before launching it unless the user has already authorized that fallback; an explicit runner request must not be silently replaced. If neither can do it, report the blocker. Never silently downgrade to inherited-history review.
 - Record returned agent IDs. Use completion notifications or the host's wait tool; follow its timeout limits and keep the user informed during long runs. Use follow-up tools only for an implementer's corrective work, never to turn that worker into a judge.
 - Respect the available concurrency slots. Close completed agents when the host supports it; otherwise reuse idle implementers for their own fixes or run queued work sequentially. Do not change host concurrency settings.
 
@@ -60,7 +60,7 @@ jq -r 'select(.type == "item.completed" and .item.type == "agent_message") | .it
 
 A successful process is not a passing gate or verdict. Require a completed turn and a substantive report; inspect failed command items and any reported denials. A nonzero exit, failed turn, missing completion, or missing report is a runner failure under stage [4], not a consumed 5-a attempt. Earlier recoverable error events need inspection, not automatic acceptance or rejection. Without `jq`, read the JSONL and final message using available file tools; only the optional tmux filter requires `jq`.
 
-Codex JSONL does not guarantee model identity in `thread.started`. Record effective identity only when runtime metadata or established configuration supplies it; keep requested identities separate from verified identities. Never read authentication files to establish a model. Unknown defaults cannot satisfy on mode's different-model requirement.
+Codex JSONL does not guarantee model identity in `thread.started`. Record effective identity only when runtime metadata or established configuration supplies it; keep requested identities separate from verified identities. Never read authentication files to establish a model. Unknown defaults cannot satisfy auto mode's different-model requirement.
 
 ## view=tmux (optional)
 
