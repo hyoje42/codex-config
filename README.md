@@ -23,6 +23,7 @@ Codex를 더 편하게 사용하기 위한 커스텀 skill과 전역 지시문�
 - `codex-merge-config` — `config.toml` merge helper. `codex-sync-to-home`/`codex-diff-with-home`에서 호출하며, 줄바꿈이 있는 문자열은 읽기 쉬운 TOML multiline basic string으로 정규화한다.
 - `tests/config-merge.sh` — current + baseline + override의 보존·우선순위와 multiline 문자열 round-trip을 임시 파일에서 검증한다.
 - `tests/inspect-session.py` — `python3 -B tests/inspect-session.py`로 세션 검색·rollout 파싱·마스킹·읽기 전용 동작을 임시 기록에서 검증한다. `inspect-session`은 홈 적용 후 `$inspect-session <thread ID 또는 제목 또는 rollout 경로>`로 호출한다.
+- `tests/session-dashboard-core.py`와 `tests/session-dashboard-ui.py` — `python3 -B tests/session-dashboard-core.py`, `python3 -B tests/session-dashboard-ui.py`로 임시 기록에서 대시보드의 수집·요약 근거·서버·내보내기와 화면 데이터 계약을 검증한다. UI 계약 검사는 실제 브라우저 조작 검증을 대신하지 않는다.
 - `tests/run-loop.py` — `python3 -B tests/run-loop.py`로 임시 Git 저장소에서 변경·인덱스·실행 권한·검증 자료의 변조 감지와 Codex 로그 표시를 검증한다.
 - `tests/sync-home.sh` — 임시 HOME과 repo 사본에서 diff/sync를 실행해, dry-run이 아무것도 쓰지 않는지·dry-run이 보고한 항목(config merge·`developer_instructions` 전달·래퍼 판정·skill 경로·공유 디렉터리 보호·고아/legacy/retired skill 포함)이 sync에서 그대로 적용되는지·sync 직후 재실행이 멱등한지 검증한다. 실제 `~/.codex`·`~/.agents`·`~/.bashrc`는 건드리지 않는다.
 
@@ -32,6 +33,14 @@ Codex를 더 편하게 사용하기 위한 커스텀 skill과 전역 지시문�
 2. `./codex-diff-with-home`으로 차이를 확인한다.
 3. 필요할 때 `./codex-sync-to-home`으로 `~/.codex/`에 반영한다.
 4. `git commit`으로 변경 이력을 남긴다(`local/`의 실제 머신 값은 커밋되지 않는다).
+
+## session-dashboard
+
+홈 적용 후 `$session-dashboard 이 프로젝트의 세션 현황을 보여 줘`로 호출하면 목표·완료한 일·현재 작업·남은 일·확인 필요 사항·주요 결정을 한국어 대시보드로 확인할 수 있다. 호출한 에이전트가 제한된 기록 발췌를 읽고 근거를 연결한 요약을 작성한다. 기본 범위는 현재 Git 프로젝트의 최근 24시간, 최대 20개 세션이며, 식별 가능한 관찰자 세션과 서브에이전트는 제외한다. 다른 프로젝트나 특정 세션도 지정할 수 있다.
+
+`$session-dashboard 요약을 갱신해 줘`, `$session-dashboard 서버를 중지해 줘`, `$session-dashboard 오프라인 HTML로 내보내 줘`로 관리한다. 브라우저의 새로고침은 기록만 확인하고 요약을 다시 생성하지 않는다. 이전 기록을 바탕으로 한 요약과 근거가 무효인 요약을 구분하며, 현재 실행 여부가 확인되지 않으면 불명으로 표시한다.
+
+Python 표준 라이브러리와 같은 skills 폴더의 `inspect-session` 파서를 사용한다. API 키·외부 글꼴·CDN은 필요하지 않다. 서버를 열 수 없는 환경에서는 같은 요약을 단일 HTML로 내보내며, 파일을 직접 열어 검색과 근거 확인을 할 수 있다. 민감 정보는 가능한 범위에서 가리지만, 일부 민감한 내용이 남아 있을 수 있다. 화면과 파일에는 선택한 기록의 발췌가 포함되므로 공유 전에 내용을 확인해야 한다. 설치는 기존 홈 동기화 절차를 따르며, 실행 절차와 요약 형식은 [SKILL.md](./home/skills/session-dashboard/SKILL.md)와 [usage.md](./home/skills/session-dashboard/references/usage.md)를 참고한다.
 
 ## run-loop
 

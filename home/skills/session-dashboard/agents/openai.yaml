@@ -1,0 +1,4 @@
+interface:
+  display_name: "세션 대시보드"
+  short_description: "세션의 목표와 진행 상황을 근거와 함께 살펴보는 로컬 대시보드"
+  default_prompt: "Use $session-dashboard to create a Korean dashboard for this project's sessions."
